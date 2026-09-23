@@ -2,12 +2,14 @@ const express = require("express");
 const router = express.Router();
 const publicController = require("../Controllers/public.controller");
 const validateSiteKey = require("../Middlewares/siteKey.middleware");
+const validate = require("../Middlewares/validate.middleware");
+const { publicSubscribeSchema, publicEventSchema } = require("../Validators/schemas");
 
 router.get("/vapid-key", publicController.getVapidKey);
 
 router.use(validateSiteKey);
 
-router.post("/subscribe", publicController.subscribe);
-router.post("/event", publicController.logEvent);
+router.post("/subscribe", validate(publicSubscribeSchema), publicController.subscribe);
+router.post("/event", validate(publicEventSchema), publicController.logEvent);
 
 module.exports = router;
