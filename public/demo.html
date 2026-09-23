@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PushForge Web Push SDK Demo</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background-color: #0f172a;
+      color: #f8fafc;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+      margin: 0;
+    }
+    .card {
+      background: #1e293b;
+      padding: 2rem;
+      border-radius: 12px;
+      box-shadow: 0 10px 25px rgba(0,0,0,0.3);
+      max-width: 480px;
+      width: 100%;
+      text-align: center;
+    }
+    h1 {
+      font-size: 1.5rem;
+      margin-bottom: 0.5rem;
+    }
+    p {
+      color: #94a3b8;
+      font-size: 0.95rem;
+      line-height: 1.5;
+    }
+    button {
+      background-color: #2563eb;
+      color: white;
+      border: none;
+      padding: 0.75rem 1.5rem;
+      font-size: 1rem;
+      font-weight: 600;
+      border-radius: 8px;
+      cursor: pointer;
+      margin-top: 1rem;
+      transition: background-color 0.2s;
+    }
+    button:hover {
+      background-color: #1d4ed8;
+    }
+    .status {
+      margin-top: 1.5rem;
+      padding: 0.75rem;
+      border-radius: 6px;
+      background: #334155;
+      font-family: monospace;
+      font-size: 0.85rem;
+      word-break: break-all;
+    }
+  </style>
+
+  <!-- PushForge Client SDK Embed -->
+  <script src="/sdk.js" data-site-key="pf_live_demo_key_123456789"></script>
+</head>
+<body>
+  <div class="card">
+    <h1>PushForge Client SDK Test</h1>
+    <p>Click the button below to request notification permission and register this browser as a push subscriber.</p>
+
+    <button id="subscribeBtn">Subscribe to Notifications</button>
+
+    <div class="status" id="statusLog">Status: SDK loaded. Waiting for user action.</div>
+  </div>
+
+  <script>
+    document.getElementById("subscribeBtn").addEventListener("click", function() {
+      var log = document.getElementById("statusLog");
+      log.textContent = "Status: Requesting permission...";
+
+      if (window.PushForge && window.PushForge.requestPermissionAndSubscribe) {
+        window.PushForge.requestPermissionAndSubscribe()
+          .then(function(res) {
+            log.textContent = "Status: Successfully Subscribed! ID: " + (res.subscriberId || "Success");
+          })
+          .catch(function(err) {
+            log.textContent = "Status Error: " + (err.message || err);
+          });
+      } else {
+        log.textContent = "Status Error: PushForge SDK not ready.";
+      }
+    });
+  </script>
+</body>
+</html>

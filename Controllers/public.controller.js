@@ -1,4 +1,9 @@
 const publicService = require("../Services/public.service");
+const { getVapidPublicKey } = require("../Config/vapid.config");
+
+const getVapidKey = (req, res) => {
+  res.status(200).json({ publicKey: getVapidPublicKey() });
+};
 
 const subscribe = async (req, res, next) => {
   try {
@@ -25,6 +30,7 @@ const logEvent = async (req, res, next) => {
 };
 
 module.exports = {
+  getVapidKey,
   subscribe,
   logEvent
 };

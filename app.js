@@ -1,4 +1,5 @@
 require("dotenv").config();
+const path = require("path");
 const express = require("express");
 const cors = require("cors");
 const cookieParser = require("cookie-parser");
@@ -27,6 +28,21 @@ app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
 
 app.use(securityMiddleware);
+
+app.use(express.static(path.join(__dirname, "public")));
+
+app.get("/sdk.js", (req, res) => {
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Content-Type", "application/javascript");
+  res.sendFile(path.join(__dirname, "public", "pushforge-sdk.js"));
+});
+
+app.get("/pushforge-sw.js", (req, res) => {
+  res.setHeader("Service-Worker-Allowed", "/");
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Content-Type", "application/javascript");
+  res.sendFile(path.join(__dirname, "public", "pushforge-sw.js"));
+});
 
 app.get("/health", (req, res) => {
   res.status(200).json({
