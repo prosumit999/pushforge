@@ -5,6 +5,14 @@ const cookieParser = require("cookie-parser");
 const connectDB = require("./Config/db.config");
 const securityMiddleware = require("./Middlewares/security.middleware");
 
+const authRoutes = require("./Routes/auth.routes");
+const websiteRoutes = require("./Routes/website.routes");
+const publicRoutes = require("./Routes/public.routes");
+const subscriberRoutes = require("./Routes/subscriber.routes");
+const segmentRoutes = require("./Routes/segment.routes");
+const notificationRoutes = require("./Routes/notification.routes");
+const analyticsRoutes = require("./Routes/analytics.routes");
+
 const app = express();
 
 app.use(
@@ -27,6 +35,14 @@ app.get("/health", (req, res) => {
     timestamp: new Date().toISOString()
   });
 });
+
+app.use("/api/v1/auth", authRoutes);
+app.use("/api/v1/websites", websiteRoutes);
+app.use("/api/v1/public", publicRoutes);
+app.use("/api/v1/subscribers", subscriberRoutes);
+app.use("/api/v1/segments", segmentRoutes);
+app.use("/api/v1/notifications", notificationRoutes);
+app.use("/api/v1/analytics", analyticsRoutes);
 
 app.use((req, res) => {
   res.status(404).json({ error: "Endpoint not found" });
