@@ -1,4 +1,5 @@
-const { Notification, Website, Subscriber, NotificationLog } = require("../Models");
+const { Notification, Website } = require("../Models");
+const workerService = require("./worker.service");
 
 const verifyWebsiteOwnership = async (userId, websiteId) => {
   const website = await Website.findOne({ _id: websiteId, user: userId });
@@ -67,43 +68,14 @@ const sendNotification = async (userId, websiteId, notificationId) => {
   notification.status = "sending";
   await notification.save();
 
-  const subscriberFilter = { website: websiteId, isActive: true };
+  setImmediate(() => {
+    workerService.dispatchNotification(notification._id);
+  });
 
-  const subscribers = await Subscriber.find(subscriberFilter);
-  const totalSubscribers = subscribers.length;
-
-  let sentCount = 0;
-  let deliveredCount = 0;
-  let failedCount = 0;
-
-  const logs = [];
-
-  for (const subscriber of subscribers) {
-    sentCount++;
-    deliveredCount++;
-
-    logs.push({
-      notification: notification._id,
-      subscriber: subscriber._id,
-      website: websiteId,
-      status: "delivered"
-    });
-  }
-
-  if (logs.length > 0) {
-    await NotificationLog.insertMany(logs);
-  }
-
-  notification.status = "sent";
-  notification.stats = {
-    sent: sentCount,
-    delivered: deliveredCount,
-    clicked: 0,
-    failed: failedCount
+  return {
+    message: "Notification queued for delivery",
+    notification
   };
-  await notification.save();
-
-  return notification;
 };
 
 const saveAsTemplate = async (userId, websiteId, notificationId, templateName) => {
