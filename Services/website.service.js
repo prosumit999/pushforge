@@ -33,11 +33,36 @@ const getWebsiteById = async (userId, websiteId) => {
   return website;
 };
 
-const verifyWebsite = async (userId, websiteId) => {
+const verifyWebsite = async (userId, websiteId, method) => {
   const website = await Website.findOne({ _id: websiteId, user: userId });
   if (!website) {
     const error = new Error("Website not found");
     error.statusCode = 404;
+    throw error;
+  }
+
+  const verificationMethod = method || website.verificationMethod || "meta_tag";
+  website.verificationMethod = verificationMethod;
+
+  const targetDomain = website.domain;
+  const token = website.verificationToken;
+
+  let isVerified = false;
+  let failureReason = "";
+
+  if (verificationMethod === "meta_tag") {
+    const result = await checkMetaTag(targetDomain, token);
+    isVerified = result.success;
+    failureReason = result.reason;
+  } else if (verificationMethod === "file_upload") {
+    const result = await checkFileUpload(targetDomain, token);
+    isVerified = result.success;
+    failureReason = result.reason;
+  }
+
+  if (!isVerified) {
+    const error = new Error(failureReason || "Domain verification failed");
+    error.statusCode = 400;
     throw error;
   }
 
@@ -46,6 +71,63 @@ const verifyWebsite = async (userId, websiteId) => {
   await website.save();
 
   return website;
+};
+
+const checkMetaTag = async (domain, token) => {
+  const urls = [`https://${domain}`, `http://${domain}`];
+
+  for (const url of urls) {
+    try {
+      const response = await fetch(url, {
+        headers: { "User-Agent": "PushForge-DomainVerifier/1.0" },
+        signal: AbortSignal.timeout(5000)
+      });
+
+      if (response.ok) {
+        const html = await response.text();
+        const metaRegex = new RegExp(`<meta\\s+name=["']pushforge-verification["']\\s+content=["']${token}["']`, "i");
+        const metaRegexAlt = new RegExp(`<meta\\s+content=["']${token}["']\\s+name=["']pushforge-verification["']`, "i");
+
+        if (metaRegex.test(html) || metaRegexAlt.test(html)) {
+          return { success: true };
+        }
+      }
+    } catch (e) {
+      continue;
+    }
+  }
+
+  return {
+    success: false,
+    reason: `Verification failed: Meta tag <meta name="pushforge-verification" content="${token}"> not found on ${domain}`
+  };
+};
+
+const checkFileUpload = async (domain, token) => {
+  const urls = [`https://${domain}/pushforge-verify.txt`, `http://${domain}/pushforge-verify.txt`];
+
+  for (const url of urls) {
+    try {
+      const response = await fetch(url, {
+        headers: { "User-Agent": "PushForge-DomainVerifier/1.0" },
+        signal: AbortSignal.timeout(5000)
+      });
+
+      if (response.ok) {
+        const text = await response.text();
+        if (text.trim().includes(token)) {
+          return { success: true };
+        }
+      }
+    } catch (e) {
+      continue;
+    }
+  }
+
+  return {
+    success: false,
+    reason: `Verification failed: Verification file at https://${domain}/pushforge-verify.txt not reachable or token mismatched`
+  };
 };
 
 const updateWebsite = async (userId, websiteId, { name, domain, timezone, status }) => {

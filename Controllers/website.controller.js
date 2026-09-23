@@ -34,7 +34,8 @@ const getWebsite = async (req, res, next) => {
 
 const verifyWebsite = async (req, res, next) => {
   try {
-    const website = await websiteService.verifyWebsite(req.user.id, req.params.id);
+    const { method } = req.body || {};
+    const website = await websiteService.verifyWebsite(req.user.id, req.params.id, method);
     res.status(200).json(website);
   } catch (error) {
     next(error);
