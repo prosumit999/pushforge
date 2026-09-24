@@ -15,6 +15,27 @@ const loginSchema = z.object({
   })
 });
 
+const changePasswordSchema = z.object({
+  body: z.object({
+    currentPassword: z.string().min(1, "Current password is required"),
+    newPassword: z.string().min(6, "New password must be at least 6 characters long")
+  })
+});
+
+const forgotPasswordSchema = z.object({
+  body: z.object({
+    email: z.string().email("Invalid email address format").optional()
+  })
+});
+
+const resetPasswordSchema = z.object({
+  body: z.object({
+    email: z.string().email("Invalid email address format").optional(),
+    token: z.string().min(1, "Verification code is required"),
+    newPassword: z.string().min(6, "New password must be at least 6 characters long")
+  })
+});
+
 const createWebsiteSchema = z.object({
   body: z.object({
     name: z.string().min(2, "Website name must be at least 2 characters long").trim(),
@@ -112,6 +133,9 @@ const createNotificationSchema = z.object({
 module.exports = {
   registerSchema,
   loginSchema,
+  changePasswordSchema,
+  forgotPasswordSchema,
+  resetPasswordSchema,
   createWebsiteSchema,
   updateWebsiteSchema,
   publicSubscribeSchema,
