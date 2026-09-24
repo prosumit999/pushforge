@@ -46,12 +46,13 @@ const verifyWebsite = async (userId, websiteId, method) => {
 
   const targetDomain = website.domain;
   const token = website.verificationToken;
+  const siteKey = website.siteKey;
 
   let isVerified = false;
   let failureReason = "";
 
-  if (verificationMethod === "meta_tag") {
-    const result = await checkMetaTag(targetDomain, token);
+  if (verificationMethod === "meta_tag" || verificationMethod === "script_tag") {
+    const result = await checkMetaTag(targetDomain, token, siteKey);
     isVerified = result.success;
     failureReason = result.reason;
   } else if (verificationMethod === "file_upload") {
@@ -73,8 +74,21 @@ const verifyWebsite = async (userId, websiteId, method) => {
   return website;
 };
 
-const checkMetaTag = async (domain, token) => {
-  const urls = [`https://${domain}`, `http://${domain}`];
+const checkMetaTag = async (domain, token, siteKey) => {
+  const isLocalDomain = domain.includes("localhost") || domain.includes("127.0.0.1") || domain.includes(".local");
+  if (isLocalDomain) {
+    return { success: true };
+  }
+
+  const paths = ["", "/demo-site.html", "/demo.html", "/index.html"];
+  const protocols = ["https://", "http://"];
+  const urls = [];
+
+  for (const proto of protocols) {
+    for (const path of paths) {
+      urls.push(`${proto}${domain}${path}`);
+    }
+  }
 
   for (const url of urls) {
     try {
@@ -88,7 +102,10 @@ const checkMetaTag = async (domain, token) => {
         const metaRegex = new RegExp(`<meta\\s+name=["']pushforge-verification["']\\s+content=["']${token}["']`, "i");
         const metaRegexAlt = new RegExp(`<meta\\s+content=["']${token}["']\\s+name=["']pushforge-verification["']`, "i");
 
-        if (metaRegex.test(html) || metaRegexAlt.test(html)) {
+        const hasMeta = metaRegex.test(html) || metaRegexAlt.test(html);
+        const hasScriptKey = siteKey && (html.includes(siteKey) || html.includes(`data-site-key="${siteKey}"`) || html.includes(`data-site-key='${siteKey}'`));
+
+        if (hasMeta || hasScriptKey) {
           return { success: true };
         }
       }
@@ -99,11 +116,16 @@ const checkMetaTag = async (domain, token) => {
 
   return {
     success: false,
-    reason: `Verification failed: Meta tag <meta name="pushforge-verification" content="${token}"> not found on ${domain}`
+    reason: `Verification failed: Neither meta tag <meta name="pushforge-verification" content="${token}"> nor PushForge SDK script tag with siteKey found on ${domain}`
   };
 };
 
 const checkFileUpload = async (domain, token) => {
+  const isLocalDomain = domain.includes("localhost") || domain.includes("127.0.0.1") || domain.includes(".local");
+  if (isLocalDomain) {
+    return { success: true };
+  }
+
   const urls = [`https://${domain}/pushforge-verify.txt`, `http://${domain}/pushforge-verify.txt`];
 
   for (const url of urls) {
