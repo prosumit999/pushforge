@@ -16,6 +16,7 @@ const createNotification = async (userId, websiteId, data) => {
 
   const { title, body, icon, badge, image, clickUrl, actionButtons, targetType, segment, scheduledAt, isTemplate, templateName } = data;
 
+  const validSegment = (segment && mongoose.Types.ObjectId.isValid(segment)) ? segment : null;
   const status = scheduledAt ? "scheduled" : "draft";
 
   const notification = await Notification.create({
@@ -29,7 +30,7 @@ const createNotification = async (userId, websiteId, data) => {
     clickUrl,
     actionButtons: actionButtons || [],
     targetType: targetType || "all",
-    segment: segment || null,
+    segment: validSegment,
     scheduledAt: scheduledAt || null,
     status,
     isTemplate: Boolean(isTemplate),
