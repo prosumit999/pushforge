@@ -64,9 +64,15 @@
   }
 
   function subscribeUser() {
+    if (window.location.protocol === "http:" && window.location.hostname !== "localhost" && window.location.hostname !== "127.0.0.1") {
+      var insecureErr = "Web Push requires HTTPS or localhost context. Browsers block Push Notifications on plain HTTP IP addresses (e.g. " + window.location.origin + "). Use localhost or HTTPS (ngrok).";
+      console.warn("PushForge SDK:", insecureErr);
+      return Promise.reject(new Error(insecureErr));
+    }
+
     if (!("serviceWorker" in navigator) || !("PushManager" in window)) {
       console.warn("PushForge SDK: Push notifications not supported by browser");
-      return Promise.reject("Push notifications not supported");
+      return Promise.reject(new Error("Push notifications not supported by this browser"));
     }
 
     return fetch(host + "/api/v1/public/vapid-key")
@@ -102,10 +108,14 @@
           body: JSON.stringify(payload)
         });
       })
-      .then(function (res) { return res.json(); })
-      .then(function (resData) {
-        console.log("PushForge: Subscriber registered successfully", resData);
-        return resData;
+      .then(function (res) {
+        return res.json().then(function(resData) {
+          if (!res.ok) {
+            throw new Error(resData.error || "Subscription request failed with status " + res.status);
+          }
+          console.log("PushForge: Subscriber registered successfully", resData);
+          return resData;
+        });
       });
   }
 
