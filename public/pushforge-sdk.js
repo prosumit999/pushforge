@@ -83,10 +83,29 @@
 
         return navigator.serviceWorker.register("/pushforge-sw.js", { scope: "/" })
           .then(function (registration) {
-            return registration.pushManager.subscribe({
-              userVisibleOnly: true,
-              applicationServerKey: applicationServerKey
-            });
+            var doSubscribe = function() {
+              return registration.pushManager.subscribe({
+                userVisibleOnly: true,
+                applicationServerKey: applicationServerKey
+              });
+            };
+
+            return registration.pushManager.getSubscription()
+              .then(function (existingSub) {
+                if (existingSub) {
+                  return existingSub.unsubscribe()
+                    .then(doSubscribe)
+                    .catch(doSubscribe);
+                }
+                return doSubscribe();
+              })
+              .catch(function (err) {
+                return registration.pushManager.getSubscription()
+                  .then(function (sub) {
+                    if (sub) return sub.unsubscribe();
+                  })
+                  .then(doSubscribe);
+              });
           });
       })
       .then(function (subscription) {
