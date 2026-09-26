@@ -3,7 +3,7 @@ const { seedDefaultAdmin } = require("../Services/auth.service");
 
 const connectDB = async () => {
   try {
-    const rawUri = process.env.MONGO_URI;
+    const rawUri = process.env.MONGO_URI || process.env.MONGODB_URI || "mongodb://localhost:27017/pushforge";
     const sanitizedUri = rawUri.replace(/:([^:@]+)@/, ":****@");
     console.log(`Attempting MongoDB Connection to: ${sanitizedUri}`);
     const conn = await mongoose.connect(rawUri, {
