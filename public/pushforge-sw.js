@@ -11,13 +11,21 @@ self.addEventListener("push", function (event) {
   }
 
   var title = data.title || "Notification";
+  var isSticky = Boolean(data.requireInteraction || data.sticky || data.isSticky);
+
   var options = {
     body: data.body || "",
     icon: data.icon || "/favicon.ico",
     badge: data.badge || "/favicon.ico",
     image: data.image || null,
+    requireInteraction: isSticky,
     data: {
-      url: data.clickUrl || data.url || "/"
+      url: data.clickUrl || data.url || "/",
+      button1Url: data.button1Url || (data.actionButtons && data.actionButtons[0] ? data.actionButtons[0].url : null),
+      button2Url: data.button2Url || (data.actionButtons && data.actionButtons[1] ? data.actionButtons[1].url : null),
+      campaignId: data.campaignId || data._id || null,
+      siteKey: data.siteKey || null,
+      host: data.host || self.location.origin
     },
     actions: data.actionButtons || []
   };
@@ -28,8 +36,42 @@ self.addEventListener("push", function (event) {
 self.addEventListener("notificationclick", function (event) {
   event.notification.close();
 
-  var targetUrl = (event.notification.data && event.notification.data.url) ? event.notification.data.url : "/";
+  var notificationData = event.notification.data || {};
+  var actionClicked = event.action || "default";
 
+  // Route to specific action button URL if clicked
+  var targetUrl = notificationData.url || "/";
+  if ((actionClicked === "action_1" || actionClicked === "button1") && notificationData.button1Url) {
+    targetUrl = notificationData.button1Url;
+  } else if ((actionClicked === "action_2" || actionClicked === "button2") && notificationData.button2Url) {
+    targetUrl = notificationData.button2Url;
+  }
+
+  // Fast background click analytics telemetry
+  var targetHost = notificationData.host || self.location.origin;
+
+  if (notificationData.siteKey) {
+    var clickPayload = JSON.stringify({
+      eventType: "click",
+      campaignId: notificationData.campaignId || null,
+      action: actionClicked,
+      url: targetUrl,
+      timestamp: new Date().toISOString()
+    });
+
+    fetch(targetHost + "/api/v1/public/click", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-site-key": notificationData.siteKey
+      },
+      body: clickPayload
+    }).catch(function (err) {
+      console.warn("PushForge SW: Click analytics telemetry failed", err);
+    });
+  }
+
+  // Focus existing open window or open target URL in new window
   event.waitUntil(
     clients.matchAll({ type: "window", includeUncontrolled: true }).then(function (clientList) {
       for (var i = 0; i < clientList.length; i++) {
@@ -42,5 +84,33 @@ self.addEventListener("notificationclick", function (event) {
         return clients.openWindow(targetUrl);
       }
     })
+  );
+});
+
+// Auto-Renew Push Subscriptions when token rotates/expires in background
+self.addEventListener("pushsubscriptionchange", function (event) {
+  event.waitUntil(
+    self.registration.pushManager.subscribe(
+      event.oldSubscription ? event.oldSubscription.options : { userVisibleOnly: true }
+    )
+      .then(function (newSubscription) {
+        console.log("PushForge SW: Push subscription auto-renewed successfully");
+        var apiHost = self.location.origin;
+        return fetch(apiHost + "/api/v1/public/subscription-change", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({
+            oldEndpoint: event.oldSubscription ? event.oldSubscription.endpoint : null,
+            newSubscription: newSubscription
+          })
+        }).catch(function (err) {
+          console.warn("PushForge SW: Token renewal sync failed", err);
+        });
+      })
+      .catch(function (err) {
+        console.error("PushForge SW: Auto-renewal failed", err);
+      })
   );
 });

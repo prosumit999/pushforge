@@ -67,11 +67,22 @@ const getTemplates = async (req, res, next) => {
   }
 };
 
+const deleteNotification = async (req, res, next) => {
+  try {
+    const { websiteId, id } = req.params;
+    const result = await notificationService.deleteNotification(req.user.id, websiteId, id);
+    res.status(200).json(result);
+  } catch (error) {
+    next(error);
+  }
+};
+
 module.exports = {
   createNotification,
   getNotifications,
   getNotification,
   sendNotification,
   saveAsTemplate,
-  getTemplates
+  getTemplates,
+  deleteNotification
 };

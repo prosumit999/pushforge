@@ -13,5 +13,6 @@ router.get("/website/:websiteId/templates", notificationController.getTemplates)
 router.get("/website/:websiteId/:id", notificationController.getNotification);
 router.post("/website/:websiteId/:id/send", notificationController.sendNotification);
 router.post("/website/:websiteId/:id/template", notificationController.saveAsTemplate);
+router.delete("/website/:websiteId/:id", notificationController.deleteNotification);
 
 module.exports = router;

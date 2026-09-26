@@ -1,5 +1,7 @@
-const { webpush } = require("../Config/vapid.config");
+const { webpush, getVapidPublicKey, getVapidPrivateKey } = require("../Config/vapid.config");
 const { Notification, Subscriber, NotificationLog, Segment } = require("../Models");
+
+const GO_WORKER_URL = process.env.GO_WORKER_URL || "http://127.0.0.1:8080/dispatch";
 
 const buildSegmentQuery = (rules, websiteId) => {
   const query = { website: websiteId, isActive: true };
@@ -28,6 +30,34 @@ const dispatchNotification = async (notificationId) => {
       return;
     }
 
+    // ── STEP 1: Attempt High-Speed Go Worker Engine Dispatch ──
+    try {
+      const vapidPublicKey = getVapidPublicKey();
+      const vapidPrivateKey = getVapidPrivateKey();
+      const goResponse = await fetch(GO_WORKER_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          notificationId: notification._id.toString(),
+          websiteId: notification.website.toString(),
+          vapidPublicKey,
+          vapidPrivateKey,
+          vapidSubject: process.env.VAPID_SUBJECT || "mailto:admin@pushforge.com",
+          concurrency: 500
+        }),
+        signal: AbortSignal.timeout(600000)
+      });
+
+      if (goResponse.ok) {
+        const goData = await goResponse.json();
+        console.log(`⚡ [GO-WORKER ENGINE SUCCESS] Dispatched via Golang (500 Goroutines): ${goData.message} in ${goData.durationMs}ms`);
+        return;
+      }
+    } catch (goErr) {
+      console.log(`ℹ️ Go Worker Engine unavailable on ${GO_WORKER_URL}. Falling back to Node.js async batch worker.`);
+    }
+
+    // ── STEP 2: Node.js Fallback Worker ──
     let subscriberQuery = { website: notification.website, isActive: true };
 
     if (notification.targetType === "segment" && notification.segment) {

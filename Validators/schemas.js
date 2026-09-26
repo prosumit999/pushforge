@@ -79,6 +79,8 @@ const publicSubscribeSchema = z.object({
 const publicEventSchema = z.object({
   body: z.object({
     eventType: z.enum(["pageview", "session_start", "session_end", "click"]),
+    campaignId: z.string().optional(),
+    action: z.string().optional(),
     path: z.string().optional(),
     duration: z.number().optional(),
     referrer: z.string().optional(),
@@ -130,6 +132,30 @@ const createNotificationSchema = z.object({
   })
 });
 
+const publicClickSchema = z.object({
+  body: z.object({
+    campaignId: z.string().optional().nullable(),
+    action: z.string().optional(),
+    url: z.string().optional(),
+    path: z.string().optional(),
+    trackingId: z.string().optional(),
+    timestamp: z.string().optional()
+  })
+});
+
+const publicSubscriptionChangeSchema = z.object({
+  body: z.object({
+    oldEndpoint: z.string().optional().nullable(),
+    newSubscription: z.object({
+      endpoint: z.string().url("Endpoint must be a valid URL"),
+      keys: z.object({
+        p256dh: z.string().optional(),
+        auth: z.string().optional()
+      }).optional()
+    })
+  })
+});
+
 module.exports = {
   registerSchema,
   loginSchema,
@@ -140,6 +166,8 @@ module.exports = {
   updateWebsiteSchema,
   publicSubscribeSchema,
   publicEventSchema,
+  publicClickSchema,
+  publicSubscriptionChangeSchema,
   createSegmentSchema,
   createNotificationSchema
 };

@@ -67,6 +67,34 @@ app.get("/health", (req, res) => {
   });
 });
 
+app.get("/api/v1/system/worker-status", async (req, res) => {
+  const startTime = Date.now();
+  try {
+    const goUrl = process.env.GO_WORKER_HEALTH_URL || "http://127.0.0.1:8080/health";
+    const goRes = await fetch(goUrl, { signal: AbortSignal.timeout(2000) });
+    const latencyMs = Date.now() - startTime;
+    if (goRes.ok) {
+      const data = await goRes.json();
+      return res.status(200).json({
+        active: true,
+        latencyMs,
+        engine: data.engine || "Golang Concurrency (500+ Goroutines)",
+        service: data.service || "PushForge High-Speed Go Worker Engine",
+        status: data.status || "ok"
+      });
+    }
+  } catch (err) {
+    // Fallback status if Go engine is unreachable
+  }
+  return res.status(200).json({
+    active: false,
+    latencyMs: Date.now() - startTime,
+    engine: "Node.js Fallback Worker",
+    service: "Node.js Async Batch Engine",
+    status: "fallback"
+  });
+});
+
 app.use("/api/v1/auth", authRoutes);
 app.use("/api/v1/websites", websiteRoutes);
 app.use("/api/v1/public", publicRoutes);

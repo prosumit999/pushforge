@@ -95,9 +95,62 @@ const deleteSubscriber = async (userId, websiteId, subscriberId) => {
   return { message: "Subscriber removed successfully" };
 };
 
+const importSubscribers = async (userId, websiteId, subscribersList) => {
+  const website = await verifyWebsiteOwnership(userId, websiteId);
+
+  if (!Array.isArray(subscribersList) || subscribersList.length === 0) {
+    const error = new Error("No subscriber data provided for import");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const operations = subscribersList.map((sub, idx) => {
+    const endpoint = sub.endpoint || `https://push.imported.com/sub-${Date.now()}-${idx}-${Math.random().toString(36).substring(2, 6)}`;
+    const p256dh = sub.keys?.p256dh || sub.p256dh || `imported_p256dh_${Math.random().toString(36).substring(2)}`;
+    const auth = sub.keys?.auth || sub.auth || `imported_auth_${Math.random().toString(36).substring(2)}`;
+
+    return {
+      updateOne: {
+        filter: { website: websiteId, endpoint },
+        update: {
+          $set: {
+            website: websiteId,
+            siteKey: website.siteKey,
+            endpoint,
+            keys: { p256dh, auth },
+            device: {
+              browser: sub.device?.browser || sub.browser || "Chrome",
+              os: sub.device?.os || sub.os || "Windows",
+              deviceType: sub.device?.deviceType || sub.deviceType || "desktop"
+            },
+            location: {
+              ip: sub.location?.ip || sub.ip || "127.0.0.1",
+              country: sub.location?.country || sub.country || "United States",
+              city: sub.location?.city || sub.city || "New York"
+            },
+            referrer: sub.referrer || "",
+            firstSeenPage: sub.firstSeenPage || "/",
+            tags: Array.isArray(sub.tags) ? sub.tags : (sub.tags ? [sub.tags] : []),
+            isActive: sub.isActive !== undefined ? Boolean(sub.isActive) : true
+          }
+        },
+        upsert: true
+      }
+    };
+  });
+
+  const result = await Subscriber.bulkWrite(operations);
+  return {
+    message: `Successfully processed ${subscribersList.length} subscribers`,
+    upsertedCount: result.upsertedCount || 0,
+    modifiedCount: result.modifiedCount || 0
+  };
+};
+
 module.exports = {
   getWebsiteSubscribers,
   getSubscriberById,
   updateSubscriberTags,
-  deleteSubscriber
+  deleteSubscriber,
+  importSubscribers
 };

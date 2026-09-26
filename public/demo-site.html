@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -10,12 +11,14 @@
       margin: 0;
       padding: 0;
     }
+
     body {
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
       background-color: #f8fafc;
       color: #0f172a;
       line-height: 1.5;
     }
+
     header {
       background: #ffffff;
       border-bottom: 1px solid #e2e8f0;
@@ -28,6 +31,7 @@
       z-index: 50;
       box-shadow: 0 2px 8px rgba(15, 23, 42, 0.04);
     }
+
     .brand {
       display: flex;
       align-items: center;
@@ -36,6 +40,7 @@
       font-size: 1.25rem;
       color: #0f172a;
     }
+
     .brand-logo {
       width: 34px;
       height: 34px;
@@ -48,6 +53,7 @@
       font-size: 1.15rem;
       font-weight: 800;
     }
+
     .nav-links {
       display: flex;
       gap: 1.25rem;
@@ -56,6 +62,7 @@
       font-weight: 500;
       color: #64748b;
     }
+
     .key-input-container {
       display: flex;
       align-items: center;
@@ -65,6 +72,7 @@
       border-radius: 999px;
       border: 1px solid #cbd5e1;
     }
+
     .key-input-container input {
       background: none;
       border: none;
@@ -75,6 +83,7 @@
       width: 230px;
       font-weight: 600;
     }
+
     .key-input-container button {
       background: #2563eb;
       color: white;
@@ -86,6 +95,7 @@
       cursor: pointer;
       transition: background 0.2s;
     }
+
     .key-input-container button:hover {
       background: #1d4ed8;
     }
@@ -93,24 +103,27 @@
     .hero {
       background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
       color: white;
-      padding: 3.5rem 2rem;
+      padding: 0px;
       text-align: center;
       border-radius: 20px;
       margin: 2rem auto;
       max-width: 1100px;
       box-shadow: 0 12px 32px rgba(15, 23, 42, 0.15);
     }
+
     .hero h1 {
       font-size: 2.25rem;
       margin-bottom: 0.75rem;
       font-weight: 800;
     }
+
     .hero p {
       color: #94a3b8;
       font-size: 1.05rem;
       max-width: 600px;
       margin: 0 auto 1.75rem auto;
     }
+
     .btn-subscribe {
       background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
       color: white;
@@ -123,6 +136,7 @@
       box-shadow: 0 4px 14px rgba(37, 99, 235, 0.4);
       transition: all 0.2s;
     }
+
     .btn-subscribe:hover {
       background: linear-gradient(135deg, #1d4ed8 0%, #1e40af 100%);
       transform: translateY(-2px);
@@ -133,6 +147,7 @@
       margin: 0 auto 3rem auto;
       padding: 0 1rem;
     }
+
     .section-title {
       font-size: 1.25rem;
       font-weight: 700;
@@ -141,12 +156,14 @@
       align-items: center;
       justify-content: space-between;
     }
+
     .products-grid {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
       gap: 1.5rem;
       margin-bottom: 2.5rem;
     }
+
     .product-card {
       background: white;
       border-radius: 16px;
@@ -157,6 +174,7 @@
       flex-direction: column;
       justify-content: space-between;
     }
+
     .product-img {
       width: 100%;
       height: 160px;
@@ -168,17 +186,20 @@
       font-size: 2.5rem;
       margin-bottom: 1rem;
     }
+
     .product-title {
       font-size: 1.05rem;
       font-weight: 700;
       margin-bottom: 0.25rem;
     }
+
     .product-price {
       font-size: 1.25rem;
       font-weight: 800;
       color: #2563eb;
       margin-bottom: 1rem;
     }
+
     .btn-action {
       background: #f1f5f9;
       color: #334155;
@@ -191,6 +212,7 @@
       width: 100%;
       transition: all 0.2s;
     }
+
     .btn-action:hover {
       background: #e2e8f0;
       color: #0f172a;
@@ -205,6 +227,7 @@
       font-size: 0.85rem;
       box-shadow: 0 10px 30px rgba(15, 23, 42, 0.1);
     }
+
     .log-title {
       color: #38bdf8;
       font-weight: 700;
@@ -212,6 +235,7 @@
       display: flex;
       justify-content: space-between;
     }
+
     .log-content {
       max-height: 140px;
       overflow-y: auto;
@@ -221,6 +245,7 @@
     }
   </style>
 </head>
+
 <body>
   <header>
     <div class="brand">
@@ -235,12 +260,8 @@
       <!-- Manual Site Key Header Input Option -->
       <div class="key-input-container">
         <span style="font-size: 0.75rem; font-weight: 700; color: #475569;">Key:</span>
-        <input
-          id="customSiteKeyInput"
-          type="text"
-          placeholder="Paste siteKey (pf_live_...)"
-          title="Manually paste or edit your PushForge siteKey"
-        />
+        <input id="customSiteKeyInput" type="text" placeholder="Paste siteKey (pf_live_...)"
+          title="Manually paste or edit your PushForge siteKey" />
         <button id="applySiteKeyBtn" type="button" onclick="window.applyNewKey()">Apply Key</button>
       </div>
     </div>
@@ -304,14 +325,14 @@
   </div>
 
   <script>
-    window.applyNewKey = function() {
+    window.applyNewKey = function () {
       var keyInput = document.getElementById("customSiteKeyInput");
       var raw = keyInput ? keyInput.value.trim() : "";
       if (!raw) {
         alert("Please enter or paste a valid PushForge siteKey (e.g. pf_live_...)");
         return;
       }
-      
+
       // Auto-extract pure siteKey if user pasted full <script> tag or data-site-key attribute
       var match = raw.match(/data-site-key=["']([^"']+)["']/i) || raw.match(/(pf_live_[a-zA-Z0-9_-]+)/i);
       var cleanKey = match ? match[1] : raw.replace(/^["']|["']$/g, '').trim();
@@ -319,7 +340,7 @@
       if (cleanKey) {
         try {
           localStorage.setItem('pushforge_demo_site_key', cleanKey);
-        } catch (e) {}
+        } catch (e) { }
         var targetUrl = window.location.protocol + "//" + window.location.host + window.location.pathname + "?siteKey=" + encodeURIComponent(cleanKey);
         window.location.href = targetUrl;
       } else {
@@ -327,14 +348,14 @@
       }
     };
 
-    (function() {
+    (function () {
       var urlParams = new URLSearchParams(window.location.search);
       var activeKey = urlParams.get('siteKey') || localStorage.getItem('pushforge_demo_site_key') || 'pf_live_demo_key_123456789';
 
       var keyInput = document.getElementById("customSiteKeyInput");
       if (keyInput) {
         keyInput.value = activeKey;
-        keyInput.addEventListener("keydown", function(e) {
+        keyInput.addEventListener("keydown", function (e) {
           if (e.key === "Enter") {
             e.preventDefault();
             window.applyNewKey();
@@ -344,7 +365,7 @@
 
       var applyBtn = document.getElementById("applySiteKeyBtn");
       if (applyBtn) {
-        applyBtn.addEventListener("click", function(e) {
+        applyBtn.addEventListener("click", function (e) {
           e.preventDefault();
           window.applyNewKey();
         });
@@ -364,17 +385,17 @@
       script.setAttribute("data-site-key", activeKey);
       document.head.appendChild(script);
 
-      script.onload = function() {
+      script.onload = function () {
         logMsg("PushForge SDK loaded & initialized with siteKey: " + activeKey);
       };
 
       var subBtn = document.getElementById("subscribeBtn");
       if (subBtn) {
-        subBtn.addEventListener("click", function() {
+        subBtn.addEventListener("click", function () {
           logMsg("Requesting browser web push permission...");
           if (window.PushForge && window.PushForge.requestPermissionAndSubscribe) {
             window.PushForge.requestPermissionAndSubscribe()
-              .then(function(res) {
+              .then(function (res) {
                 logMsg("✅ Push Subscription SUCCESS! Subscriber ID: " + (res.subscriberId || "Registered"));
                 var badge = document.getElementById("subStatusBadge");
                 if (badge) {
@@ -382,7 +403,7 @@
                   badge.style.color = "#4ade80";
                 }
               })
-              .catch(function(err) {
+              .catch(function (err) {
                 logMsg("❌ Push Subscription ERROR: " + (err.message || err));
                 var badge = document.getElementById("subStatusBadge");
                 if (badge) {
@@ -396,7 +417,7 @@
         });
       }
 
-      window.trackEvent = function(eventType, pathName) {
+      window.trackEvent = function (eventType, pathName) {
         logMsg("Sending analytics event: " + eventType + " for path: " + pathName);
         if (window.PushForge && window.PushForge.sendEvent) {
           window.PushForge.sendEvent(eventType, { path: pathName });
@@ -405,4 +426,5 @@
     })();
   </script>
 </body>
+
 </html>

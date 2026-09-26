@@ -111,11 +111,23 @@ const getTemplates = async (userId, websiteId) => {
   return await Notification.find({ website: websiteId, isTemplate: true }).sort({ createdAt: -1 });
 };
 
+const deleteNotification = async (userId, websiteId, notificationId) => {
+  await verifyWebsiteOwnership(userId, websiteId);
+  const notification = await Notification.findOneAndDelete({ _id: notificationId, website: websiteId });
+  if (!notification) {
+    const error = new Error("Notification not found");
+    error.statusCode = 404;
+    throw error;
+  }
+  return { message: "Notification deleted successfully" };
+};
+
 module.exports = {
   createNotification,
   getWebsiteNotifications,
   getNotificationById,
   sendNotification,
   saveAsTemplate,
-  getTemplates
+  getTemplates,
+  deleteNotification
 };
