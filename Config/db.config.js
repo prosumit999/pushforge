@@ -10,7 +10,7 @@ const connectDB = async () => {
     await seedDefaultAdmin();
   } catch (error) {
     console.error(`Database Connection Error: ${error.message}`);
-    process.exit(1);
+    // Do not call process.exit(1) so server stays up to serve health checks & log errors cleanly
   }
 };
 
