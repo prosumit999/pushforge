@@ -4,7 +4,11 @@ const express = require("express");
 const cors = require("cors");
 const cookieParser = require("cookie-parser");
 const connectDB = require("./Config/db.config");
-const securityMiddleware = require("./Middlewares/security.middleware");
+const {
+  securityMiddleware,
+  productionAuthLimiter,
+  productionPublicLimiter
+} = require("./Middlewares/security.middleware");
 
 const authRoutes = require("./Routes/auth.routes");
 const websiteRoutes = require("./Routes/website.routes");
@@ -15,6 +19,10 @@ const notificationRoutes = require("./Routes/notification.routes");
 const analyticsRoutes = require("./Routes/analytics.routes");
 
 const app = express();
+
+if (process.env.NODE_ENV === "production") {
+  app.set("trust proxy", 1);
+}
 
 const allowedOrigins = [
   "http://localhost:5173",
@@ -59,6 +67,15 @@ app.get("/pushforge-sw.js", (req, res) => {
   res.sendFile(path.join(__dirname, "public", "pushforge-sw.js"));
 });
 
+app.get("/", (req, res) => {
+  res.status(200).json({
+    message: "meoww 🐾",
+    status: "online",
+    service: "PushForge Backend API Engine",
+    version: "v1.0.0"
+  });
+});
+
 app.get("/health", (req, res) => {
   res.status(200).json({
     status: "ok",
@@ -95,9 +112,9 @@ app.get("/api/v1/system/worker-status", async (req, res) => {
   });
 });
 
-app.use("/api/v1/auth", authRoutes);
+app.use("/api/v1/auth", productionAuthLimiter, authRoutes);
 app.use("/api/v1/websites", websiteRoutes);
-app.use("/api/v1/public", publicRoutes);
+app.use("/api/v1/public", productionPublicLimiter, publicRoutes);
 app.use("/api/v1/subscribers", subscriberRoutes);
 app.use("/api/v1/segments", segmentRoutes);
 app.use("/api/v1/notifications", notificationRoutes);
