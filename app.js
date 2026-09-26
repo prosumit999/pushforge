@@ -3,6 +3,7 @@ const path = require("path");
 const express = require("express");
 const cors = require("cors");
 const cookieParser = require("cookie-parser");
+const mongoose = require("mongoose");
 const connectDB = require("./Config/db.config");
 const {
   securityMiddleware,
@@ -77,8 +78,10 @@ app.get("/", (req, res) => {
 });
 
 app.get("/health", (req, res) => {
-  res.status(200).json({
-    status: "ok",
+  const dbConnected = mongoose.connection.readyState === 1;
+  res.status(dbConnected ? 200 : 503).json({
+    status: dbConnected ? "ok" : "database_disconnected",
+    dbState: mongoose.connection.readyState,
     service: "PushForge Backend",
     timestamp: new Date().toISOString()
   });
@@ -110,6 +113,16 @@ app.get("/api/v1/system/worker-status", async (req, res) => {
     service: "Node.js Async Batch Engine",
     status: "fallback"
   });
+});
+
+// Guard API routes if Database is not connected
+app.use("/api/v1", (req, res, next) => {
+  if (mongoose.connection.readyState !== 1) {
+    return res.status(503).json({
+      error: "Database Connection Error: Backend is not connected to MongoDB. Please configure MONGO_URI in deployment environment variables."
+    });
+  }
+  next();
 });
 
 app.use("/api/v1/auth", productionAuthLimiter, authRoutes);
