@@ -29,6 +29,8 @@ const analyticsEventSchema = new mongoose.Schema(
     path: String,
     duration: Number,
     referrer: String,
+    x: Number,
+    y: Number,
     location: {
       country: String,
       city: String
