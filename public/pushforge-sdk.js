@@ -1,12 +1,12 @@
 (function () {
   "use strict";
 
-  var currentScript = document.currentScript || document.querySelector("script[data-site-key]");
-  var siteKey = currentScript ? currentScript.getAttribute("data-site-key") : null;
+  var currentScript = document.currentScript || document.querySelector("script[data-site-key]") || document.querySelector("script[data-tracking-id]") || document.querySelector("script[src*='sdk.js']");
+  var siteKey = currentScript ? (currentScript.getAttribute("data-site-key") || currentScript.getAttribute("data-tracking-id")) : null;
   var host = currentScript ? (currentScript.getAttribute("data-host") || new URL(currentScript.src).origin) : window.location.origin;
 
   if (!siteKey) {
-    console.error("PushForge SDK Error: Missing data-site-key attribute on script tag");
+    console.error("PushForge SDK Error: Missing data-site-key or data-tracking-id attribute on script tag");
     return;
   }
 
@@ -138,8 +138,15 @@
   }
 
   function subscribeUser() {
-    if (window.location.protocol === "http:" && window.location.hostname !== "localhost" && window.location.hostname !== "127.0.0.1") {
-      var insecureErr = "Web Push requires HTTPS or localhost context. Browsers block Push Notifications on plain HTTP IP addresses (e.g. " + window.location.origin + "). Use localhost or HTTPS (ngrok).";
+    var hostname = window.location.hostname || "";
+    var isLocalDev = hostname === "localhost" ||
+                     hostname === "127.0.0.1" ||
+                     hostname.endsWith(".local") ||
+                     hostname.endsWith(".test") ||
+                     hostname.endsWith(".dev");
+
+    if (window.location.protocol === "http:" && !isLocalDev) {
+      var insecureErr = "Web Push requires HTTPS or local development context (e.g. " + window.location.origin + "). Use HTTPS or localhost.";
       console.warn("PushForge SDK:", insecureErr);
       return Promise.reject(new Error(insecureErr));
     }
@@ -288,8 +295,316 @@
     };
   }
 
+  function collectEmail(email, name, source) {
+    if (!email || !email.includes("@")) {
+      return Promise.reject(new Error("Valid email is required"));
+    }
+    return fetch(host + "/api/v1/public/email-collect", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-site-key": siteKey
+      },
+      body: JSON.stringify({
+        email: email,
+        name: name || "",
+        source: source || "SDK Prompt",
+        device: detectDevice()
+      })
+    }).then(function (res) {
+      return res.json().then(function (data) {
+        if (!res.ok) throw new Error(data.error || "Email collection failed");
+        return data;
+      });
+    });
+  }
+
+  function showEmailPrompt(opts) {
+    opts = opts || {};
+    var title = opts.title || "Join Our VIP Updates & Notifications";
+    var message = opts.message || "Enter your email to receive exclusive offers, updates, and push notifications directly to your inbox and browser.";
+    var placeholder = opts.placeholder || "Enter your email address...";
+    var buttonText = opts.buttonText || "Subscribe Now";
+    var cancelText = opts.cancelText || "No thanks";
+
+    var existingModal = document.getElementById("pushforge-email-prompt-modal");
+    if (existingModal && existingModal.parentNode) {
+      existingModal.parentNode.removeChild(existingModal);
+    }
+
+    var modal = document.createElement("div");
+    modal.id = "pushforge-email-prompt-modal";
+    modal.style.cssText = "position:fixed;bottom:24px;right:24px;z-index:999999;width:380px;max-width:calc(100vw - 32px);background:#ffffff;box-shadow:0 25px 50px -12px rgba(124,58,237,0.25), 0 10px 15px -3px rgba(0,0,0,0.1);border-radius:20px;padding:24px;font-family:system-ui,-apple-system,sans-serif;color:#1e293b;border:1px solid #e2e8f0;transition:all 0.3s ease;";
+
+    modal.innerHTML = '<div style="display:flex;flex-direction:column;gap:14px;">' +
+      '<div style="display:flex;align-items:center;justify-content:space-between;">' +
+      '<div style="display:flex;align-items:center;gap:10px;">' +
+      '<div style="background:linear-gradient(135deg, #7c3aed, #4f46e5);color:#ffffff;width:36px;height:36px;border-radius:10px;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 12px rgba(124,58,237,0.3);">' +
+      '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path><polyline points="22,6 12,13 2,6"></polyline></svg>' +
+      '</div>' +
+      '<h4 style="margin:0;font-size:15px;font-weight:700;color:#0f172a;letter-spacing:-0.01em;">' + title + '</h4>' +
+      '</div>' +
+      '<button id="pf-email-close" style="background:none;border:none;color:#94a3b8;font-size:18px;cursor:pointer;padding:0;line-height:1;">&times;</button>' +
+      '</div>' +
+      '<p style="margin:0;font-size:13px;line-height:1.45;color:#64748b;">' + message + '</p>' +
+      '<form id="pf-email-form" style="display:flex;flex-direction:column;gap:10px;margin-top:4px;">' +
+      '<input type="email" id="pf-email-input" placeholder="' + placeholder + '" required style="width:100%;box-sizing:border-box;padding:10px 14px;border-radius:10px;border:1px solid #cbd5e1;font-size:13px;outline:none;transition:border-color 0.2s;" />' +
+      '<div style="display:flex;gap:8px;justify-content:flex-end;">' +
+      '<button type="button" id="pf-email-cancel" style="background:#f1f5f9;color:#64748b;border:none;padding:9px 14px;border-radius:10px;font-size:12px;font-weight:600;cursor:pointer;">' + cancelText + '</button>' +
+      '<button type="submit" id="pf-email-submit" style="background:linear-gradient(135deg, #7c3aed, #4f46e5);color:#ffffff;border:none;padding:9px 16px;border-radius:10px;font-size:12px;font-weight:600;cursor:pointer;box-shadow:0 4px 12px rgba(124,58,237,0.3);">' + buttonText + '</button>' +
+      '</div>' +
+      '</form>' +
+      '<div id="pf-email-status" style="display:none;font-size:12px;margin-top:2px;"></div>' +
+      '</div>';
+
+    document.body.appendChild(modal);
+
+    var closeBtn = document.getElementById("pf-email-close");
+    var cancelBtn = document.getElementById("pf-email-cancel");
+    var form = document.getElementById("pf-email-form");
+    var statusDiv = document.getElementById("pf-email-status");
+    var submitBtn = document.getElementById("pf-email-submit");
+
+    var dismissModal = function () {
+      if (modal.parentNode) modal.parentNode.removeChild(modal);
+    };
+
+    if (closeBtn) closeBtn.onclick = dismissModal;
+    if (cancelBtn) cancelBtn.onclick = dismissModal;
+
+    if (form) {
+      form.onsubmit = function (e) {
+        e.preventDefault();
+        var emailInput = document.getElementById("pf-email-input");
+        var val = emailInput ? emailInput.value.trim() : "";
+        if (!val || !val.includes("@")) {
+          statusDiv.style.display = "block";
+          statusDiv.style.color = "#ef4444";
+          statusDiv.innerText = "Please enter a valid email address.";
+          return;
+        }
+
+        submitBtn.disabled = true;
+        submitBtn.innerText = "Saving...";
+
+        collectEmail(val, "", opts.source || "Email Opt-in Prompt")
+          .then(function () {
+            statusDiv.style.display = "block";
+            statusDiv.style.color = "#10b981";
+            statusDiv.innerText = "Thank you! Email registered successfully.";
+            setTimeout(function () {
+              dismissModal();
+              if (opts.enablePushAlso !== false && Notification.permission !== "granted") {
+                PushForge.requestPermissionAndSubscribe().catch(function () {});
+              }
+            }, 1200);
+          })
+          .catch(function (err) {
+            submitBtn.disabled = false;
+            submitBtn.innerText = buttonText;
+            statusDiv.style.display = "block";
+            statusDiv.style.color = "#ef4444";
+            statusDiv.innerText = err.message || "Failed to save email. Please try again.";
+          });
+      };
+    }
+  }
+
+  function renderBellWidget(opts) {
+    if (document.getElementById("pushforge-bell-widget")) return;
+    opts = opts || {};
+    var title = opts.headline || "Get Instant Notifications";
+    var message = opts.description || "Stay updated with important announcements.";
+
+    var bellWrap = document.createElement("div");
+    bellWrap.id = "pushforge-bell-widget";
+    bellWrap.style.cssText = "position:fixed;bottom:24px;left:24px;z-index:999999;font-family:system-ui,-apple-system,sans-serif;";
+
+    bellWrap.innerHTML = '<div id="pf-bell-btn" style="width:48px;height:48px;border-radius:50%;background:linear-gradient(135deg, #7c3aed, #4f46e5);color:#fff;display:flex;align-items:center;justify-content:center;box-shadow:0 10px 25px rgba(124,58,237,0.4);cursor:pointer;position:relative;">' +
+      '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path><path d="M13.73 21a2 2 0 0 1-3.46 0"></path></svg>' +
+      '<span style="position:absolute;top:2px;right:2px;width:10px;height:10px;background:#ef4444;border-radius:50%;border:2px solid #fff;"></span>' +
+      '</div>' +
+      '<div id="pf-bell-card" style="display:none;position:absolute;bottom:60px;left:0;width:300px;background:#fff;border:1px solid #e2e8f0;border-radius:16px;padding:16px;box-shadow:0 20px 25px -5px rgba(0,0,0,0.1);color:#1e293b;">' +
+      '<h4 style="margin:0 0 6px 0;font-size:14px;font-weight:700;">' + title + '</h4>' +
+      '<p style="margin:0 0 12px 0;font-size:12px;color:#64748b;line-height:1.4;">' + message + '</p>' +
+      '<button id="pf-bell-allow-btn" style="width:100%;background:#7c3aed;color:#fff;border:none;padding:8px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;">' + (opts.allowText || "Subscribe Now") + '</button>' +
+      '</div>';
+
+    document.body.appendChild(bellWrap);
+
+    var bellBtn = document.getElementById("pf-bell-btn");
+    var bellCard = document.getElementById("pf-bell-card");
+    var allowBtn = document.getElementById("pf-bell-allow-btn");
+
+    if (bellBtn && bellCard) {
+      bellBtn.onclick = function () {
+        bellCard.style.display = bellCard.style.display === "none" ? "block" : "none";
+      };
+    }
+    if (allowBtn) {
+      allowBtn.onclick = function () {
+        bellCard.style.display = "none";
+        PushForge.requestPermissionAndSubscribe().catch(function () {});
+      };
+    }
+  }
+
+  function showCombinedDualPrompt(opts) {
+    opts = opts || {};
+    var title = opts.headline || opts.title || "Get VIP Updates & Notifications";
+    var message = opts.description || opts.message || "Enter your email to receive exclusive offers, and click allow to get push notifications!";
+    var acceptText = opts.allowText || opts.acceptText || "Subscribe & Allow Notifications";
+    var cancelText = opts.dismissText || opts.cancelText || "Later";
+
+    var existingModal = document.getElementById("pushforge-combined-modal");
+    if (existingModal && existingModal.parentNode) {
+      existingModal.parentNode.removeChild(existingModal);
+    }
+
+    var modal = document.createElement("div");
+    modal.id = "pushforge-combined-modal";
+    modal.style.cssText = "position:fixed;bottom:24px;right:24px;z-index:999999;width:380px;max-width:calc(100vw - 32px);background:#ffffff;box-shadow:0 25px 50px -12px rgba(124,58,237,0.25), 0 10px 15px -3px rgba(0,0,0,0.1);border-radius:20px;padding:24px;font-family:system-ui,-apple-system,sans-serif;color:#1e293b;border:1px solid #e2e8f0;transition:all 0.3s ease;";
+
+    modal.innerHTML = '<div style="display:flex;flex-direction:column;gap:14px;">' +
+      '<div style="display:flex;align-items:center;justify-content:space-between;">' +
+      '<div style="display:flex;align-items:center;gap:10px;">' +
+      '<div style="background:linear-gradient(135deg, #7c3aed, #4f46e5);color:#ffffff;width:38px;height:38px;border-radius:12px;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 12px rgba(124,58,237,0.3);">' +
+      '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path><path d="M13.73 21a2 2 0 0 1-3.46 0"></path></svg>' +
+      '</div>' +
+      '<h4 style="margin:0;font-size:15px;font-weight:700;color:#0f172a;">' + title + '</h4>' +
+      '</div>' +
+      '<button id="pf-dual-close" style="background:none;border:none;color:#94a3b8;font-size:18px;cursor:pointer;padding:0;line-height:1;">&times;</button>' +
+      '</div>' +
+      '<p style="margin:0;font-size:13px;line-height:1.45;color:#64748b;">' + message + '</p>' +
+      '<form id="pf-dual-form" style="display:flex;flex-direction:column;gap:10px;margin-top:4px;">' +
+      '<input type="email" id="pf-dual-email" placeholder="Enter your email address..." style="width:100%;box-sizing:border-box;padding:10px 14px;border-radius:10px;border:1px solid #cbd5e1;font-size:13px;outline:none;" />' +
+      '<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:4px;">' +
+      '<button type="button" id="pf-dual-cancel" style="background:#f1f5f9;color:#64748b;border:none;padding:9px 14px;border-radius:10px;font-size:12px;font-weight:600;cursor:pointer;">' + cancelText + '</button>' +
+      '<button type="submit" id="pf-dual-submit" style="background:linear-gradient(135deg, #7c3aed, #4f46e5);color:#ffffff;border:none;padding:9px 16px;border-radius:10px;font-size:12px;font-weight:600;cursor:pointer;box-shadow:0 4px 12px rgba(124,58,237,0.3);">' + acceptText + '</button>' +
+      '</div>' +
+      '</form>' +
+      '<div id="pf-dual-status" style="display:none;font-size:12px;margin-top:2px;"></div>' +
+      '</div>';
+
+    document.body.appendChild(modal);
+
+    var closeBtn = document.getElementById("pf-dual-close");
+    var cancelBtn = document.getElementById("pf-dual-cancel");
+    var form = document.getElementById("pf-dual-form");
+    var statusDiv = document.getElementById("pf-dual-status");
+    var submitBtn = document.getElementById("pf-dual-submit");
+
+    var dismissModal = function () {
+      snoozePrompt(7);
+      if (modal.parentNode) modal.parentNode.removeChild(modal);
+    };
+
+    if (closeBtn) closeBtn.onclick = dismissModal;
+    if (cancelBtn) cancelBtn.onclick = dismissModal;
+
+    if (form) {
+      form.onsubmit = function (e) {
+        e.preventDefault();
+        var emailInput = document.getElementById("pf-dual-email");
+        var val = emailInput ? emailInput.value.trim() : "";
+
+        submitBtn.disabled = true;
+        submitBtn.innerText = "Subscribing...";
+
+        var emailPromise = val && val.includes("@") ? collectEmail(val, "", "Combined Dual Prompt") : Promise.resolve();
+
+        emailPromise
+          .then(function () {
+            statusDiv.style.display = "block";
+            statusDiv.style.color = "#10b981";
+            statusDiv.innerText = "Subscribed! Requesting browser notification permission...";
+            return PushForge.requestPermissionAndSubscribe();
+          })
+          .then(function () {
+            setTimeout(dismissModal, 1000);
+          })
+          .catch(function (err) {
+            submitBtn.disabled = false;
+            submitBtn.innerText = acceptText;
+            setTimeout(dismissModal, 1000);
+          });
+      };
+    }
+  }
+
+  function fetchSiteConfigAndAutoPrompt() {
+    fetch(host + "/api/v1/public/config", {
+      headers: { "x-site-key": siteKey }
+    })
+      .then(function (res) { return res.json(); })
+      .then(function (data) {
+        if (data.publicKey) setCachedVapidKey(data.publicKey);
+        var config = data.promptConfig || {};
+
+        if (config.autoPrompt === false || isSnoozed()) return;
+
+        var delay = (config.delaySeconds || 1) * 1000;
+        setTimeout(function () {
+          var mode = config.promptMode || "push-only";
+          var style = config.promptStyle || "glass-modal";
+
+          if (mode === "email-only") {
+            showEmailPrompt(config);
+            return;
+          }
+
+          if (mode === "combined-dual") {
+            showCombinedDualPrompt(config);
+            return;
+          }
+
+          if (mode === "push-fallback-email") {
+            if (Notification.permission === "denied" || !("Notification" in window)) {
+              showEmailPrompt(config);
+              return;
+            }
+
+            showCustomPrompt({
+              title: config.headline,
+              message: config.description,
+              acceptText: config.allowText,
+              cancelText: config.dismissText,
+              cardPosition: config.cardPosition,
+              onDismiss: function () {
+                showEmailPrompt(config);
+              }
+            });
+            return;
+          }
+
+          // Default: push-only
+          if (style === "email-capture") {
+            showEmailPrompt(config);
+          } else if (style === "browser-native") {
+            if (Notification.permission === "default") {
+              PushForge.requestPermissionAndSubscribe().catch(function () {});
+            }
+          } else if (style === "bell-widget") {
+            renderBellWidget(config);
+          } else {
+            showCustomPrompt({
+              title: config.headline,
+              message: config.description,
+              acceptText: config.allowText,
+              cancelText: config.dismissText,
+              cardPosition: config.cardPosition
+            });
+          }
+        }, delay);
+      })
+      .catch(function (err) {
+        console.warn("PushForge SDK config fetch fallback:", err.message);
+      });
+  }
+
   function init() {
     sendEvent("pageview");
+    fetchSiteConfigAndAutoPrompt();
 
     attachMobileFirstGestureTrigger(function () {
       console.log("PushForge SDK: First mobile gesture detected");
@@ -306,6 +621,8 @@
     init: init,
     subscribe: subscribeUser,
     prompt: showCustomPrompt,
+    emailPrompt: showEmailPrompt,
+    collectEmail: collectEmail,
     snoozePrompt: snoozePrompt,
     isSnoozed: isSnoozed,
     requestPermissionAndSubscribe: function () {

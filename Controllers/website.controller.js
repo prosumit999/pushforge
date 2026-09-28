@@ -51,6 +51,15 @@ const updateWebsite = async (req, res, next) => {
   }
 };
 
+const updatePromptConfig = async (req, res, next) => {
+  try {
+    const website = await websiteService.updatePromptConfig(req.user.id, req.params.id, req.body);
+    res.status(200).json(website);
+  } catch (error) {
+    next(error);
+  }
+};
+
 const deleteWebsite = async (req, res, next) => {
   try {
     const result = await websiteService.deleteWebsite(req.user.id, req.params.id);
@@ -66,5 +75,6 @@ module.exports = {
   getWebsite,
   verifyWebsite,
   updateWebsite,
+  updatePromptConfig,
   deleteWebsite
 };

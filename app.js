@@ -18,6 +18,7 @@ const subscriberRoutes = require("./Routes/subscriber.routes");
 const segmentRoutes = require("./Routes/segment.routes");
 const notificationRoutes = require("./Routes/notification.routes");
 const analyticsRoutes = require("./Routes/analytics.routes");
+const emailRoutes = require("./Routes/email.routes");
 
 const app = express();
 
@@ -132,6 +133,8 @@ app.use("/api/v1/subscribers", subscriberRoutes);
 app.use("/api/v1/segments", segmentRoutes);
 app.use("/api/v1/notifications", notificationRoutes);
 app.use("/api/v1/analytics", analyticsRoutes);
+app.use("/api/v1/collected-emails", emailRoutes);
+
 
 app.use((req, res) => {
   res.status(404).json({ error: "Endpoint not found" });

@@ -12,6 +12,7 @@ router.get("/", websiteController.getWebsites);
 router.get("/:id", websiteController.getWebsite);
 router.post("/:id/verify", websiteController.verifyWebsite);
 router.put("/:id", validate(updateWebsiteSchema), websiteController.updateWebsite);
+router.put("/:id/prompt-config", websiteController.updatePromptConfig);
 router.delete("/:id", websiteController.deleteWebsite);
 
 module.exports = router;

@@ -5,6 +5,23 @@ const getVapidKey = (req, res) => {
   res.status(200).json({ publicKey: getVapidPublicKey() });
 };
 
+const getConfig = (req, res) => {
+  res.status(200).json({
+    publicKey: getVapidPublicKey(),
+    promptConfig: req.website?.promptConfig || {
+      promptMode: "push-only",
+      promptStyle: "glass-modal",
+      cardPosition: "bottom-center",
+      headline: "Get Instant Updates & Flash Alerts",
+      description: "Subscribe to get real-time price drop alerts, news, and exclusive offers directly in your browser.",
+      allowText: "Allow Notifications",
+      dismissText: "Later",
+      autoPrompt: true,
+      delaySeconds: 1
+    }
+  });
+};
+
 const subscribe = async (req, res, next) => {
   try {
     const subscriber = await publicService.registerPublicSubscriber(req.website, req.body);
@@ -55,6 +72,7 @@ const handleSubscriptionChange = async (req, res, next) => {
 
 module.exports = {
   getVapidKey,
+  getConfig,
   subscribe,
   logEvent,
   trackClick,

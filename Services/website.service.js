@@ -186,6 +186,23 @@ const deleteWebsite = async (userId, websiteId) => {
   return { message: "Website and associated data successfully deleted" };
 };
 
+const updatePromptConfig = async (userId, websiteId, promptConfig) => {
+  const website = await Website.findOne({ _id: websiteId, user: userId });
+  if (!website) {
+    const error = new Error("Website not found");
+    error.statusCode = 404;
+    throw error;
+  }
+
+  website.promptConfig = {
+    ...(website.promptConfig || {}),
+    ...promptConfig
+  };
+
+  await website.save();
+  return website;
+};
+
 const cleanDomain = (domain) => {
   return domain.replace(/^https?:\/\//, "").replace(/\/.*$/, "").toLowerCase();
 };
@@ -196,5 +213,6 @@ module.exports = {
   getWebsiteById,
   verifyWebsite,
   updateWebsite,
+  updatePromptConfig,
   deleteWebsite
 };
