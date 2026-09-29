@@ -4,7 +4,26 @@ const actionButtonSchema = new mongoose.Schema(
   {
     action: { type: String, required: true },
     title: { type: String, required: true },
-    icon: { type: String }
+    icon: { type: String },
+    // Target the button opens. The service worker reads this to decide the
+    // click destination, so dropping it makes the button open the main URL.
+    url: { type: String }
+  },
+  { _id: false }
+);
+
+// Mirrors Segment.rules so an ad-hoc filter can be stored inline on a
+// notification. Field and operator validity is enforced by the audience
+// allowlist at write and dispatch time.
+const segmentRuleSchema = new mongoose.Schema(
+  {
+    field: { type: String, required: true },
+    operator: {
+      type: String,
+      enum: ["equals", "not_equals", "contains", "greater_than", "less_than", "in"],
+      required: true
+    },
+    value: { type: mongoose.Schema.Types.Mixed, required: true }
   },
   { _id: false }
 );
@@ -46,10 +65,26 @@ const notificationSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: "Segment"
     },
+    // Ad-hoc rules used when targetType is "filter". Shape matches Segment.rules
+    // and is validated against the audience allowlist at dispatch time.
+    filterRules: [segmentRuleSchema],
     scheduledAt: Date,
+    sentAt: Date,
+    cancelledAt: Date,
+    // Which engine actually delivered the last send, so the report can explain
+    // why per-subscriber rows may be absent for Go-dispatched broadcasts.
+    handledBy: {
+      type: String,
+      enum: ["go", "node", null],
+      default: null
+    },
+    dispatchAttempts: {
+      type: Number,
+      default: 0
+    },
     status: {
       type: String,
-      enum: ["draft", "scheduled", "sending", "sent", "failed"],
+      enum: ["draft", "scheduled", "queued", "sending", "sent", "failed", "cancelled"],
       default: "draft"
     },
     isTemplate: {
@@ -68,5 +103,7 @@ const notificationSchema = new mongoose.Schema(
     timestamps: true
   }
 );
+
+notificationSchema.index({ status: 1, scheduledAt: 1 });
 
 module.exports = mongoose.model("Notification", notificationSchema);

@@ -4,6 +4,7 @@ const Subscriber = require("./Subscriber");
 const Segment = require("./Segment");
 const Notification = require("./Notification");
 const NotificationLog = require("./NotificationLog");
+const DispatchJob = require("./DispatchJob");
 const AnalyticsEvent = require("./AnalyticsEvent");
 
 module.exports = {
@@ -13,5 +14,6 @@ module.exports = {
   Segment,
   Notification,
   NotificationLog,
+  DispatchJob,
   AnalyticsEvent
 };

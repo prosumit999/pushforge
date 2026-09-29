@@ -1,5 +1,5 @@
 const crypto = require("crypto");
-const { Website, Subscriber, Notification, AnalyticsEvent } = require("../Models");
+const { Website, Subscriber, Notification, AnalyticsEvent, DispatchJob, NotificationLog } = require("../Models");
 
 const createWebsite = async (userId, { name, domain, timezone }) => {
   const siteKey = `pf_live_${crypto.randomBytes(12).toString("hex")}`;
@@ -182,6 +182,10 @@ const deleteWebsite = async (userId, websiteId) => {
   await Subscriber.deleteMany({ website: websiteId });
   await Notification.deleteMany({ website: websiteId });
   await AnalyticsEvent.deleteMany({ website: websiteId });
+  // Queue jobs and per-send logs reference the deleted notifications, so they
+  // must go too or they linger as orphans.
+  await DispatchJob.deleteMany({ website: websiteId });
+  await NotificationLog.deleteMany({ website: websiteId });
 
   return { message: "Website and associated data successfully deleted" };
 };

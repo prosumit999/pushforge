@@ -148,9 +148,14 @@ app.use((err, req, res, next) => {
   });
 });
 
+const schedulerService = require("./Services/scheduler.service");
+const queueWorker = require("./Services/queue.worker");
+
 const start = async () => {
   try {
     await connectDB();
+    schedulerService.startScheduler();
+    queueWorker.startQueueWorker();
     const PORT = process.env.PORT || 5000;
     app.listen(PORT, () => {
       console.log(`PushForge backend running on port ${PORT}`);

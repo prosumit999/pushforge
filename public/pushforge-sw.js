@@ -1,3 +1,14 @@
+// The API host is supplied by the SDK at registration time via the script URL
+// query string, because this worker runs on the customer's origin rather than
+// the PushForge API origin.
+function resolveApiHost() {
+  try {
+    var apiHost = new URL(self.location.href).searchParams.get("apiHost");
+    if (apiHost) return apiHost;
+  } catch (e) {}
+  return null;
+}
+
 self.addEventListener("push", function (event) {
   var data = {};
   if (event.data) {
@@ -48,27 +59,38 @@ self.addEventListener("notificationclick", function (event) {
   }
 
   // Fast background click analytics telemetry
-  var targetHost = notificationData.host || self.location.origin;
+  var targetHost = notificationData.host || resolveApiHost() || self.location.origin;
 
   if (notificationData.siteKey) {
-    var clickPayload = JSON.stringify({
-      eventType: "click",
-      campaignId: notificationData.campaignId || null,
-      action: actionClicked,
-      url: targetUrl,
-      timestamp: new Date().toISOString()
-    });
+    // Report this device's own push endpoint so the click can be attributed to
+    // the subscriber that actually received the notification.
+    event.waitUntil(
+      self.registration.pushManager
+        .getSubscription()
+        .then(function (sub) { return sub ? sub.endpoint : null; })
+        .catch(function () { return null; })
+        .then(function (endpoint) {
+          var clickPayload = JSON.stringify({
+            eventType: "click",
+            campaignId: notificationData.campaignId || null,
+            action: actionClicked,
+            url: targetUrl,
+            endpoint: endpoint,
+            timestamp: new Date().toISOString()
+          });
 
-    fetch(targetHost + "/api/v1/public/click", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-site-key": notificationData.siteKey
-      },
-      body: clickPayload
-    }).catch(function (err) {
-      console.warn("PushForge SW: Click analytics telemetry failed", err);
-    });
+          return fetch(targetHost + "/api/v1/public/click", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "x-site-key": notificationData.siteKey
+            },
+            body: clickPayload
+          }).catch(function (err) {
+            console.warn("PushForge SW: Click analytics telemetry failed", err);
+          });
+        })
+    );
   }
 
   // Focus existing open window or open target URL in new window

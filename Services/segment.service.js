@@ -1,4 +1,5 @@
 const { Segment, Website, Subscriber } = require("../Models");
+const { buildSubscriberQuery } = require("./audience.service");
 
 const verifyWebsiteOwnership = async (userId, websiteId) => {
   const website = await Website.findOne({ _id: websiteId, user: userId });
@@ -10,34 +11,9 @@ const verifyWebsiteOwnership = async (userId, websiteId) => {
   return website;
 };
 
-const buildSegmentQuery = (rules, websiteId) => {
-  const query = { website: websiteId, isActive: true };
-
-  if (!Array.isArray(rules) || rules.length === 0) {
-    return query;
-  }
-
-  rules.forEach((rule) => {
-    const { field, operator, value } = rule;
-    if (!field || !operator) return;
-
-    if (operator === "equals") {
-      query[field] = value;
-    } else if (operator === "not_equals") {
-      query[field] = { $ne: value };
-    } else if (operator === "contains") {
-      query[field] = new RegExp(value, "i");
-    } else if (operator === "in" && Array.isArray(value)) {
-      query[field] = { $in: value };
-    } else if (operator === "greater_than") {
-      query[field] = { $gt: value };
-    } else if (operator === "less_than") {
-      query[field] = { $lt: value };
-    }
-  });
-
-  return query;
-};
+// Segment rules go through the audience allowlist, so an unknown or dangerous
+// field name is rejected instead of being interpolated straight into a query.
+const buildSegmentQuery = (rules, websiteId) => buildSubscriberQuery(websiteId, rules);
 
 const createSegment = async (userId, websiteId, { name, rules }) => {
   await verifyWebsiteOwnership(userId, websiteId);

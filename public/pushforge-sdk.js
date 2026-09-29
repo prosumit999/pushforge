@@ -89,11 +89,15 @@
         }
 
         var swPaths = ["/pushforge-sw.js", "/sw.js", "/service-worker.js"];
+        // The service worker runs on this site's origin but must post click
+        // telemetry to the PushForge API, so the API host travels along in the
+        // registration URL where the worker can read it.
+        var swQuery = "?apiHost=" + encodeURIComponent(host);
         function tryNext(index) {
           if (index >= swPaths.length) {
             return Promise.reject(new Error("No valid service worker found at /pushforge-sw.js, /sw.js, or /service-worker.js"));
           }
-          return navigator.serviceWorker.register(swPaths[index], { scope: "/" })
+          return navigator.serviceWorker.register(swPaths[index] + swQuery, { scope: "/" })
             .catch(function () {
               return tryNext(index + 1);
             });

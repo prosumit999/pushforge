@@ -1,5 +1,17 @@
 const { Website, Subscriber, Notification, AnalyticsEvent } = require("../Models");
 
+// Page analytics are keyed by pathname. Click events arrive with an absolute
+// URL while notification targets may be absolute or site-relative, so both are
+// reduced to a pathname before they are joined.
+const toPathname = (value) => {
+  if (!value) return "/";
+  try {
+    return new URL(value).pathname || "/";
+  } catch (e) {
+    return value.startsWith("/") ? value : `/${value}`;
+  }
+};
+
 const verifyWebsiteOwnership = async (userId, websiteId) => {
   const website = await Website.findOne({ _id: websiteId, user: userId });
   if (!website) {
@@ -74,24 +86,18 @@ const getWebsiteVisitorAnalytics = async (userId, websiteId) => {
 
   const objectId = new (require("mongoose").Types.ObjectId)(websiteId);
 
-  // Fetch all notifications for this website to aggregate push count per target page
+  // Fetch all notifications for this website to aggregate push count per target page.
   const notifications = await Notification.find({ website: websiteId });
   const pushStatsByPath = {};
 
   notifications.forEach((n) => {
-    let p = "/";
-    if (n.url) {
-      try {
-        const u = new URL(n.url);
-        p = u.pathname || "/";
-      } catch (e) {
-        p = n.url.startsWith("/") ? n.url : "/" + n.url;
-      }
-    }
+    // clickUrl is the field the model and the worker actually use; reading a
+    // non-existent "url" bucketed every notification under "/".
+    const p = toPathname(n.clickUrl);
     if (!pushStatsByPath[p]) {
       pushStatsByPath[p] = { pushSent: 0, pushClicks: 0 };
     }
-    pushStatsByPath[p].pushSent += n.stats?.sent || 1;
+    pushStatsByPath[p].pushSent += n.stats?.sent || 0;
     pushStatsByPath[p].pushClicks += n.stats?.clicked || 0;
   });
 
@@ -102,14 +108,14 @@ const getWebsiteVisitorAnalytics = async (userId, websiteId) => {
       $group: {
         _id: "$path",
         views: { $sum: 1 },
-        totalDurationSec: { $sum: { $ifNull: ["$duration", 45] } },
+        totalDurationSec: { $sum: { $ifNull: ["$duration", 0] } },
         shortSessions: {
           $sum: {
             $cond: [
               {
                 $or: [
                   { $eq: ["$eventType", "session_end"] },
-                  { $lt: [{ $ifNull: ["$duration", 45] }, 10] }
+                  { $lt: [{ $ifNull: ["$duration", 0] }, 10] }
                 ]
               },
               1,
@@ -122,89 +128,91 @@ const getWebsiteVisitorAnalytics = async (userId, websiteId) => {
     { $sort: { views: -1 } }
   ]);
 
-  const defaultPaths = ["/", "/products", "/pricing", "/blog", "/checkout", "/features"];
   const pageMap = new Map();
 
   pageAnalyticsRaw.forEach((item) => {
-    const path = item._id || "/";
+    const path = toPathname(item._id);
     const views = item.views || 0;
     const totalDuration = item.totalDurationSec || 0;
-    const avgSec = views > 0 ? Math.round(totalDuration / views) : 45;
-    const bounces = item.shortSessions || Math.floor(views * 0.28);
-    const bounceRate = views > 0 ? parseFloat(((bounces / views) * 100).toFixed(1)) : 24.5;
-    const pushInfo = pushStatsByPath[path] || { pushSent: Math.floor(views * 0.4), pushClicks: Math.floor(views * 0.08) };
+    const bounces = item.shortSessions || 0;
+    const pushInfo = pushStatsByPath[path] || { pushSent: 0, pushClicks: 0 };
+
+    // Two raw buckets can normalise to the same pathname (for example a
+    // relative and an absolute form of the same page), so they are merged.
+    const existing = pageMap.get(path);
+    const mergedViews = (existing ? existing.views : 0) + views;
+    const mergedDuration = (existing ? existing.totalDurationSec : 0) + totalDuration;
+    const mergedBounces = (existing ? existing._bounces : 0) + bounces;
 
     pageMap.set(path, {
       path,
-      views,
+      views: mergedViews,
       pushSent: pushInfo.pushSent,
       pushClicks: pushInfo.pushClicks,
-      totalDurationSec: totalDuration,
-      avgDurationSec: avgSec,
-      bounceRate
+      totalDurationSec: mergedDuration,
+      avgDurationSec: mergedViews > 0 ? Math.round(mergedDuration / mergedViews) : 0,
+      bounceRate: mergedViews > 0 ? parseFloat(((mergedBounces / mergedViews) * 100).toFixed(1)) : 0,
+      _bounces: mergedBounces
     });
   });
 
-  // Ensure default paths are populated for a rich analytics presentation
-  defaultPaths.forEach((path, idx) => {
+  // Drop the internal accumulator before the rows leave the service.
+  pageMap.forEach((row) => { delete row._bounces; });
+
+  // A notification can target a page that has no recorded traffic yet. Those
+  // pages still have real push performance, so they are listed with zero views
+  // rather than being omitted entirely.
+  Object.keys(pushStatsByPath).forEach((path) => {
     if (!pageMap.has(path)) {
-      const views = Math.max(12, 140 - idx * 22);
-      const pushSent = Math.max(3, Math.floor(views * 0.35));
-      const pushClicks = Math.max(1, Math.floor(pushSent * 0.22));
-      const avgSec = 45 + ((idx * 27) % 80);
-      const bounceRate = parseFloat((21.4 + (idx * 3.7) % 15).toFixed(1));
+      const pushInfo = pushStatsByPath[path];
       pageMap.set(path, {
         path,
-        views,
-        pushSent,
-        pushClicks,
-        totalDurationSec: views * avgSec,
-        avgDurationSec: avgSec,
-        bounceRate
+        views: 0,
+        pushSent: pushInfo.pushSent,
+        pushClicks: pushInfo.pushClicks,
+        totalDurationSec: 0,
+        avgDurationSec: 0,
+        bounceRate: 0
       });
     }
   });
 
+  // Only pages with real recorded events are reported. Previously a set of
+  // invented "default paths" with fabricated view counts was injected here,
+  // which made an empty account look busy.
   const pagePushStats = Array.from(pageMap.values()).sort((a, b) => b.views - a.views);
 
   // Overall totals
   const totalViews = pagePushStats.reduce((acc, p) => acc + p.views, 0);
   const totalPushSent = pagePushStats.reduce((acc, p) => acc + p.pushSent, 0);
   const totalPushClicks = pagePushStats.reduce((acc, p) => acc + p.pushClicks, 0);
-  const avgBounceRate = parseFloat(
-    (pagePushStats.reduce((acc, p) => acc + p.bounceRate, 0) / (pagePushStats.length || 1)).toFixed(1)
-  );
-  const avgDurationSec = Math.round(
-    pagePushStats.reduce((acc, p) => acc + p.avgDurationSec, 0) / (pagePushStats.length || 1)
-  );
+  const avgBounceRate = pagePushStats.length
+    ? parseFloat((pagePushStats.reduce((acc, p) => acc + p.bounceRate, 0) / pagePushStats.length).toFixed(1))
+    : 0;
+  const avgDurationSec = pagePushStats.length
+    ? Math.round(pagePushStats.reduce((acc, p) => acc + p.avgDurationSec, 0) / pagePushStats.length)
+    : 0;
 
-  // Heatmap click data per page
-  const clickEvents = await AnalyticsEvent.find({ website: websiteId, eventType: "click" }).limit(100);
-  let heatmapPoints = clickEvents.map((ev) => ({
+  // Heatmap click data. Only events that actually carry coordinates are
+  // plotted; random positions are not invented for the rest, because a
+  // fabricated heatmap is indistinguishable from real user behaviour.
+  const clickEvents = await AnalyticsEvent.find({
+    website: websiteId,
+    eventType: "click",
+    x: { $ne: null },
+    y: { $ne: null }
+  })
+    .sort({ timestamp: -1 })
+    .limit(200)
+    .lean();
+
+  const heatmapPoints = clickEvents.map((ev) => ({
     path: ev.path || "/",
-    x: ev.x || Math.floor(Math.random() * 80 + 10),
-    y: ev.y || Math.floor(Math.random() * 70 + 15),
-    intensity: Math.random() * 0.8 + 0.2,
+    x: ev.x,
+    y: ev.y,
+    intensity: 0.6,
     device: ev.device?.deviceType || "desktop"
   }));
-
-  // Fallback demo heatmap points if database has few events recorded
-  if (heatmapPoints.length < 15) {
-    const demoPoints = [
-      { path: "/", x: 50, y: 35, intensity: 0.95, device: "desktop" }, // Hero CTA button
-      { path: "/", x: 52, y: 36, intensity: 0.88, device: "desktop" },
-      { path: "/", x: 48, y: 34, intensity: 0.92, device: "desktop" },
-      { path: "/", x: 80, y: 12, intensity: 0.75, device: "desktop" }, // Nav Buy Now button
-      { path: "/", x: 82, y: 13, intensity: 0.70, device: "desktop" },
-      { path: "/", x: 25, y: 65, intensity: 0.65, device: "desktop" }, // Feature Card
-      { path: "/", x: 50, y: 88, intensity: 0.82, device: "desktop" }, // Bottom Subscribe CTA
-      { path: "/pricing", x: 30, y: 50, intensity: 0.90, device: "desktop" }, // Pro Plan Button
-      { path: "/pricing", x: 65, y: 50, intensity: 0.85, device: "desktop" }, // Enterprise Plan
-      { path: "/products", x: 45, y: 40, intensity: 0.78, device: "desktop" },
-      { path: "/checkout", x: 50, y: 70, intensity: 0.96, device: "desktop" } // Complete Order
-    ];
-    heatmapPoints = [...heatmapPoints, ...demoPoints];
-  }
 
   const countryBreakdown = await AnalyticsEvent.aggregate([
     { $match: { website: objectId, "location.country": { $ne: null } } },

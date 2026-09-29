@@ -109,6 +109,15 @@ const createSegmentSchema = z.object({
   })
 });
 
+// Shared shape for segment rules and ad-hoc audience filters. The allowed
+// field names themselves are enforced by the audience service allowlist, which
+// is also what blocks operator injection.
+const audienceRuleSchema = z.object({
+  field: z.string().min(1, "Rule field is required"),
+  operator: z.enum(["equals", "not_equals", "contains", "greater_than", "less_than", "in"]),
+  value: z.any()
+});
+
 const createNotificationSchema = z.object({
   body: z.object({
     title: z.string().min(1, "Notification title is required").max(200, "Title too long").trim(),
@@ -121,14 +130,59 @@ const createNotificationSchema = z.object({
       z.object({
         action: z.string(),
         title: z.string(),
-        icon: z.string().optional()
+        icon: z.string().optional(),
+        url: z.string().optional()
       })
     ).optional(),
     targetType: z.enum(["all", "segment", "filter"]).optional(),
     segment: z.string().optional(),
+    filterRules: z.array(audienceRuleSchema).max(25, "A maximum of 25 filter rules is allowed").optional(),
     scheduledAt: z.string().optional(),
     isTemplate: z.boolean().optional(),
     templateName: z.string().optional()
+  })
+});
+
+const updateTemplateSchema = z.object({
+  body: z.object({
+    title: z.string().min(1, "Template title is required").max(200, "Title too long").trim().optional(),
+    body: z.string().min(1, "Template body is required").max(1000, "Body too long").trim().optional(),
+    icon: z.string().optional(),
+    badge: z.string().optional(),
+    image: z.string().optional(),
+    clickUrl: z.string().optional(),
+    templateName: z.string().max(120, "Template name too long").trim().optional(),
+    actionButtons: z.array(
+      z.object({
+        action: z.string(),
+        title: z.string(),
+        icon: z.string().optional(),
+        url: z.string().optional()
+      })
+    ).optional()
+  })
+});
+
+const audiencePreviewSchema = z.object({
+  body: z.object({
+    targetType: z.enum(["all", "segment", "filter"]).optional(),
+    segmentId: z.string().optional(),
+    rules: z.array(audienceRuleSchema).max(25, "A maximum of 25 filter rules is allowed").optional()
+  })
+});
+
+const testSendSchema = z.object({
+  body: z.object({
+    subscriberId: z.string().min(1, "subscriberId is required")
+  })
+});
+
+const scheduleNotificationSchema = z.object({
+  body: z.object({
+    scheduledAt: z
+      .string()
+      .min(1, "scheduledAt is required")
+      .refine((value) => !Number.isNaN(new Date(value).getTime()), "scheduledAt must be a valid date")
   })
 });
 
@@ -139,6 +193,8 @@ const publicClickSchema = z.object({
     url: z.string().optional(),
     path: z.string().optional(),
     trackingId: z.string().optional(),
+    // Push endpoint reported by the service worker, used for attribution.
+    endpoint: z.string().optional().nullable(),
     timestamp: z.string().optional()
   })
 });
@@ -169,5 +225,9 @@ module.exports = {
   publicClickSchema,
   publicSubscriptionChangeSchema,
   createSegmentSchema,
-  createNotificationSchema
+  createNotificationSchema,
+  scheduleNotificationSchema,
+  audiencePreviewSchema,
+  testSendSchema,
+  updateTemplateSchema
 };
