@@ -73,7 +73,7 @@ const updateSubscriberTags = async (userId, websiteId, subscriberId, tags) => {
   const subscriber = await Subscriber.findOneAndUpdate(
     { _id: subscriberId, website: websiteId },
     { tags: Array.isArray(tags) ? tags : [] },
-    { new: true }
+    { returnDocument: "after" }
   );
 
   if (!subscriber) {

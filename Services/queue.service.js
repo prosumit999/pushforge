@@ -47,7 +47,7 @@ const claimNextJob = async () => {
       $set: { status: "active", lockedAt: now, lockedBy: WORKER_ID },
       $inc: { attempts: 1 }
     },
-    { sort: { priority: 1, runAt: 1 }, new: true }
+    { sort: { priority: 1, runAt: 1 }, returnDocument: "after" }
   );
 };
 
@@ -66,7 +66,7 @@ const completeJob = async (jobId, result = {}) => {
         }
       }
     },
-    { new: true }
+    { returnDocument: "after" }
   );
 };
 
@@ -84,7 +84,7 @@ const failJob = async (jobId, error) => {
     return DispatchJob.findByIdAndUpdate(
       jobId,
       { $set: { status: "failed", lastError: message, lockedAt: null, lockedBy: null } },
-      { new: true }
+      { returnDocument: "after" }
     );
   }
 
@@ -99,7 +99,7 @@ const failJob = async (jobId, error) => {
         runAt: new Date(Date.now() + computeBackoffMs(job.attempts))
       }
     },
-    { new: true }
+    { returnDocument: "after" }
   );
 };
 
@@ -119,7 +119,7 @@ const recoverStaleJobs = async () => {
       ? { $set: { status: "failed", lastError: "Abandoned by a stopped consumer", lockedAt: null, lockedBy: null } }
       : { $set: { status: "queued", runAt: new Date(), lockedAt: null, lockedBy: null } };
 
-    const res = await DispatchJob.findOneAndUpdate({ _id: job._id, status: "active" }, update, { new: true });
+    const res = await DispatchJob.findOneAndUpdate({ _id: job._id, status: "active" }, update, { returnDocument: "after" });
     if (res) {
       recovered++;
       console.warn(`Queue: recovered stale job ${job._id} (${exhausted ? "marked failed" : "requeued"}).`);

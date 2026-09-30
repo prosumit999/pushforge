@@ -124,7 +124,7 @@ const sendNotification = async (userId, websiteId, notificationId) => {
   const notification = await Notification.findOneAndUpdate(
     { _id: notificationId, website: websiteId, status: { $nin: ["queued", "sending"] } },
     { $set: { status: "queued", dispatchAttempts: 0 } },
-    { new: true }
+    { returnDocument: "after" }
   );
 
   if (!notification) {
@@ -170,7 +170,7 @@ const scheduleNotification = async (userId, websiteId, notificationId, scheduled
     {
       $set: { status: "scheduled", scheduledAt: when, cancelledAt: null, dispatchAttempts: 0 }
     },
-    { new: true }
+    { returnDocument: "after" }
   );
 
   if (!notification) {
@@ -190,7 +190,7 @@ const cancelScheduledNotification = async (userId, websiteId, notificationId) =>
     {
       $set: { status: "cancelled", cancelledAt: new Date(), scheduledAt: null }
     },
-    { new: true }
+    { returnDocument: "after" }
   );
 
   if (!notification) {

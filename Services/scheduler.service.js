@@ -21,7 +21,7 @@ const claimDueNotification = async (notificationId) => {
       $set: { status: "queued" },
       $inc: { dispatchAttempts: 1 }
     },
-    { new: true }
+    { returnDocument: "after" }
   );
 };
 
@@ -111,7 +111,7 @@ const reconcileOrphanedNotifications = async () => {
       const claimed = await Notification.findOneAndUpdate(
         { _id: notif._id, status: notif.status },
         { $set: { status: "queued" }, $inc: { dispatchAttempts: 1 } },
-        { new: true }
+        { returnDocument: "after" }
       );
 
       if (claimed) {

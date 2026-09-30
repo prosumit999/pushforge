@@ -23,7 +23,7 @@ const registerPublicSubscriber = async (website, data) => {
       tags: tags || [],
       isActive: true
     },
-    { upsert: true, new: true, runValidators: true }
+    { upsert: true, returnDocument: "after", runValidators: true }
   );
 
   return subscriber;
@@ -89,7 +89,7 @@ const recordNotificationClick = async (website, notificationId, subscriber, now)
   const claimedRow = await NotificationLog.findOneAndUpdate(
     { notification: notification._id, subscriber: subscriber._id, clickedAt: null },
     { $set: { status: "clicked", clickedAt: now }, $inc: { clickCount: 1 } },
-    { sort: { timestamp: -1 }, new: true }
+    { sort: { timestamp: -1 }, returnDocument: "after" }
   );
 
   if (claimedRow) {
@@ -186,7 +186,7 @@ const renewPublicSubscription = async (website, data) => {
         keys: newSubscription.keys || {},
         isActive: true
       },
-      { new: true }
+      { returnDocument: "after" }
     );
   }
 
@@ -200,7 +200,7 @@ const renewPublicSubscription = async (website, data) => {
         keys: newSubscription.keys || {},
         isActive: true
       },
-      { upsert: true, new: true }
+      { upsert: true, returnDocument: "after" }
     );
   }
 
