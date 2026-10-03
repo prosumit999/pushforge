@@ -6,6 +6,13 @@ const { logSecurityEvent } = require("./superadmin.service");
 
 const getBrandName = () => process.env.APP_NAME || process.env.BRAND_NAME || "PushForge";
 
+const isVerificationRequired = () => {
+  if (process.env.REQUIRE_EMAIL_VERIFICATION !== undefined) {
+    return process.env.REQUIRE_EMAIL_VERIFICATION === "true";
+  }
+  return process.env.NODE_ENV === "production";
+};
+
 const seedDefaultAdmin = async () => {
   try {
     const adminEmail = (process.env.ADMIN_EMAIL || "admin@gmail.com").toLowerCase();
@@ -41,6 +48,7 @@ const registerUser = async ({ name, email, password }) => {
 
   const saltRounds = 10;
   const hashedPassword = await bcrypt.hash(password, saltRounds);
+  const requiresVerification = isVerificationRequired();
 
   const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
   const expiration = new Date(Date.now() + 15 * 60 * 1000);
@@ -51,11 +59,28 @@ const registerUser = async ({ name, email, password }) => {
     password: hashedPassword,
     role: "admin",
     plan: "Starter",
-    status: "pending_verification",
-    isVerified: false,
-    verificationToken: otpCode,
-    verificationExpires: expiration
+    status: requiresVerification ? "pending_verification" : "active",
+    isVerified: !requiresVerification,
+    verificationToken: requiresVerification ? otpCode : null,
+    verificationExpires: requiresVerification ? expiration : null
   });
+
+  if (!requiresVerification) {
+    logSecurityEvent({
+      type: "USER_REGISTERED",
+      title: "New Admin Account Created (Starter Plan)",
+      detail: `Account ${user.email} created with default Starter (Free) plan. Email verification bypassed in development.`,
+      severity: "info"
+    });
+
+    const token = generateToken(user);
+    return {
+      requireVerification: false,
+      user: formatUserResponse(user),
+      token,
+      message: "Admin account registered and activated successfully!"
+    };
+  }
 
   const emailHtml = buildVerificationEmailHtml({
     name: user.name,
@@ -145,6 +170,15 @@ const resendVerificationOtp = async (emailInput) => {
     return { message: "Account is already verified." };
   }
 
+  if (!isVerificationRequired()) {
+    user.isVerified = true;
+    user.status = "active";
+    user.verificationToken = null;
+    user.verificationExpires = null;
+    await user.save();
+    return { message: "Email verification is disabled in development. Account activated." };
+  }
+
   const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
   const expiration = new Date(Date.now() + 15 * 60 * 1000);
 
@@ -186,32 +220,40 @@ const loginUser = async ({ email, password }) => {
     throw error;
   }
 
+  const requiresVerification = isVerificationRequired();
+
   if (!user.isVerified && user.role !== "superadmin") {
-    // Generate fresh OTP code if verification pending
-    const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
-    const expiration = new Date(Date.now() + 15 * 60 * 1000);
-    user.verificationToken = otpCode;
-    user.verificationExpires = expiration;
-    await user.save();
+    if (!requiresVerification) {
+      user.isVerified = true;
+      user.status = "active";
+      await user.save();
+    } else {
+      // Generate fresh OTP code if verification pending
+      const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
+      const expiration = new Date(Date.now() + 15 * 60 * 1000);
+      user.verificationToken = otpCode;
+      user.verificationExpires = expiration;
+      await user.save();
 
-    const emailHtml = buildVerificationEmailHtml({
-      name: user.name,
-      otpCode,
-      planName: user.plan || "Starter (Free)"
-    });
+      const emailHtml = buildVerificationEmailHtml({
+        name: user.name,
+        otpCode,
+        planName: user.plan || "Starter (Free)"
+      });
 
-    await sendEmail({
-      to: user.email,
-      subject: `Verify Your ${getBrandName()} Admin Account`,
-      html: emailHtml
-    });
+      await sendEmail({
+        to: user.email,
+        subject: `Verify Your ${getBrandName()} Admin Account`,
+        html: emailHtml
+      });
 
-    return {
-      requireVerification: true,
-      email: user.email,
-      message: "Email verification required before accessing console. We sent a 6-digit verification code to your email.",
-      otpCode: process.env.NODE_ENV === "development" ? otpCode : undefined
-    };
+      return {
+        requireVerification: true,
+        email: user.email,
+        message: "Email verification required before accessing console. We sent a 6-digit verification code to your email.",
+        otpCode: process.env.NODE_ENV === "development" ? otpCode : undefined
+      };
+    }
   }
 
   const token = generateToken(user);
