@@ -1,5 +1,6 @@
 const crypto = require("crypto");
 const { Website, Subscriber, Notification, AnalyticsEvent, DispatchJob, NotificationLog } = require("../Models");
+const { logSecurityEvent } = require("./superadmin.service");
 
 const createWebsite = async (userId, { name, domain, timezone }) => {
   const siteKey = `pf_live_${crypto.randomBytes(12).toString("hex")}`;
@@ -14,6 +15,13 @@ const createWebsite = async (userId, { name, domain, timezone }) => {
     siteSecret,
     verificationToken,
     timezone: timezone || "UTC"
+  });
+
+  logSecurityEvent({
+    type: "WEBSITE_PROVISIONED",
+    title: "New Website Domain Configured",
+    detail: `Domain ${website.domain} (${website.name}) registered with VAPID keys`,
+    severity: "info"
   });
 
   return website;

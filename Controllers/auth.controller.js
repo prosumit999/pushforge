@@ -8,14 +8,53 @@ const register = async (req, res, next) => {
     }
 
     const result = await authService.registerUser({ name, email, password });
-    
-    res.cookie("token", result.token, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      maxAge: 7 * 24 * 60 * 60 * 1000
-    });
+
+    if (result.token) {
+      res.cookie("token", result.token, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === "production",
+        maxAge: 7 * 24 * 60 * 60 * 1000
+      });
+    }
 
     res.status(201).json(result);
+  } catch (error) {
+    next(error);
+  }
+};
+
+const verifyEmail = async (req, res, next) => {
+  try {
+    const { email, otpCode } = req.body;
+    if (!email || !otpCode) {
+      return res.status(400).json({ error: "Email and 6-digit verification code are required" });
+    }
+
+    const result = await authService.verifyEmailOtp({ email, otpCode });
+
+    if (result.token) {
+      res.cookie("token", result.token, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === "production",
+        maxAge: 7 * 24 * 60 * 60 * 1000
+      });
+    }
+
+    res.status(200).json(result);
+  } catch (error) {
+    next(error);
+  }
+};
+
+const resendVerification = async (req, res, next) => {
+  try {
+    const { email } = req.body;
+    if (!email) {
+      return res.status(400).json({ error: "Email is required" });
+    }
+
+    const result = await authService.resendVerificationOtp(email);
+    res.status(200).json(result);
   } catch (error) {
     next(error);
   }
@@ -30,11 +69,13 @@ const login = async (req, res, next) => {
 
     const result = await authService.loginUser({ email, password });
 
-    res.cookie("token", result.token, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      maxAge: 7 * 24 * 60 * 60 * 1000
-    });
+    if (result.token) {
+      res.cookie("token", result.token, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === "production",
+        maxAge: 7 * 24 * 60 * 60 * 1000
+      });
+    }
 
     res.status(200).json(result);
   } catch (error) {
@@ -88,6 +129,8 @@ const logout = async (req, res) => {
 
 module.exports = {
   register,
+  verifyEmail,
+  resendVerification,
   login,
   getProfile,
   changePassword,

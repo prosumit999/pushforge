@@ -1,7 +1,10 @@
 const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
 const { User } = require("../Models");
-const { sendEmail } = require("./email.service");
+const { sendEmail, buildVerificationEmailHtml, buildPasswordResetEmailHtml } = require("./email.service");
+const { logSecurityEvent } = require("./superadmin.service");
+
+const getBrandName = () => process.env.APP_NAME || process.env.BRAND_NAME || "PushForge";
 
 const seedDefaultAdmin = async () => {
   try {
@@ -16,7 +19,10 @@ const seedDefaultAdmin = async () => {
         name: "Admin",
         email: adminEmail,
         password: hashedPassword,
-        role: "admin"
+        role: "admin",
+        plan: "Self-Hosted",
+        status: "active",
+        isVerified: true
       });
       console.log(`Default admin account initialized from env: ${adminEmail}`);
     }
@@ -36,14 +42,133 @@ const registerUser = async ({ name, email, password }) => {
   const saltRounds = 10;
   const hashedPassword = await bcrypt.hash(password, saltRounds);
 
+  const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
+  const expiration = new Date(Date.now() + 15 * 60 * 1000);
+
   const user = await User.create({
     name,
     email: email.toLowerCase(),
-    password: hashedPassword
+    password: hashedPassword,
+    role: "admin",
+    plan: "Starter",
+    status: "pending_verification",
+    isVerified: false,
+    verificationToken: otpCode,
+    verificationExpires: expiration
+  });
+
+  const emailHtml = buildVerificationEmailHtml({
+    name: user.name,
+    otpCode,
+    planName: "Starter (Free)"
+  });
+
+  const emailResult = await sendEmail({
+    to: user.email,
+    subject: `Verify Your ${getBrandName()} Admin Account`,
+    html: emailHtml
+  });
+
+  logSecurityEvent({
+    type: "USER_REGISTERED",
+    title: "New Admin Account Created (Starter Plan)",
+    detail: `Account ${user.email} created with default Starter (Free) plan. Verification email sent.`,
+    severity: "info"
+  });
+
+  return {
+    requireVerification: true,
+    email: user.email,
+    message: "Admin account registered! Please check your email for the 6-digit verification code.",
+    emailSent: emailResult.success,
+    otpCode: process.env.NODE_ENV === "development" ? otpCode : undefined
+  };
+};
+
+const verifyEmailOtp = async ({ email, otpCode }) => {
+  const targetEmail = (email || "").toLowerCase().trim();
+  const user = await User.findOne({ email: targetEmail });
+
+  if (!user) {
+    const error = new Error("Account not found");
+    error.statusCode = 404;
+    throw error;
+  }
+
+  if (user.isVerified) {
+    const token = generateToken(user);
+    return {
+      user: formatUserResponse(user),
+      token,
+      message: "Account is already verified!"
+    };
+  }
+
+  if (user.verificationToken !== otpCode || !user.verificationExpires || user.verificationExpires < new Date()) {
+    const error = new Error("Invalid or expired 6-digit verification code");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  user.isVerified = true;
+  user.status = "active";
+  user.verificationToken = null;
+  user.verificationExpires = null;
+  await user.save();
+
+  logSecurityEvent({
+    type: "ADMIN_LOGIN",
+    title: "Email Verification Successful",
+    detail: `Admin user (${user.email}) verified email address and activated console access`,
+    severity: "info"
   });
 
   const token = generateToken(user);
-  return { user: formatUserResponse(user), token };
+  return {
+    user: formatUserResponse(user),
+    token,
+    message: `Email verified successfully! Welcome to ${getBrandName()}.`
+  };
+};
+
+const resendVerificationOtp = async (emailInput) => {
+  const targetEmail = (emailInput || "").toLowerCase().trim();
+  const user = await User.findOne({ email: targetEmail });
+
+  if (!user) {
+    const error = new Error("No account found with this email address");
+    error.statusCode = 404;
+    throw error;
+  }
+
+  if (user.isVerified) {
+    return { message: "Account is already verified." };
+  }
+
+  const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
+  const expiration = new Date(Date.now() + 15 * 60 * 1000);
+
+  user.verificationToken = otpCode;
+  user.verificationExpires = expiration;
+  await user.save();
+
+  const emailHtml = buildVerificationEmailHtml({
+    name: user.name,
+    otpCode,
+    planName: user.plan || "Starter (Free)"
+  });
+
+  const emailResult = await sendEmail({
+    to: user.email,
+    subject: `Resent: Verify Your ${getBrandName()} Admin Account`,
+    html: emailHtml
+  });
+
+  return {
+    message: "A new 6-digit verification code has been sent to your email",
+    emailSent: emailResult.success,
+    otpCode: process.env.NODE_ENV === "development" ? otpCode : undefined
+  };
 };
 
 const loginUser = async ({ email, password }) => {
@@ -61,7 +186,41 @@ const loginUser = async ({ email, password }) => {
     throw error;
   }
 
+  if (!user.isVerified && user.role !== "superadmin") {
+    // Generate fresh OTP code if verification pending
+    const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
+    const expiration = new Date(Date.now() + 15 * 60 * 1000);
+    user.verificationToken = otpCode;
+    user.verificationExpires = expiration;
+    await user.save();
+
+    const emailHtml = buildVerificationEmailHtml({
+      name: user.name,
+      otpCode,
+      planName: user.plan || "Starter (Free)"
+    });
+
+    await sendEmail({
+      to: user.email,
+      subject: `Verify Your ${getBrandName()} Admin Account`,
+      html: emailHtml
+    });
+
+    return {
+      requireVerification: true,
+      email: user.email,
+      message: "Email verification required before accessing console. We sent a 6-digit verification code to your email.",
+      otpCode: process.env.NODE_ENV === "development" ? otpCode : undefined
+    };
+  }
+
   const token = generateToken(user);
+  logSecurityEvent({
+    type: "ADMIN_LOGIN",
+    title: "Admin Account Authenticated",
+    detail: `Admin user (${user.email}) logged into ${getBrandName()} Console`,
+    severity: "info"
+  });
   return { user: formatUserResponse(user), token };
 };
 
@@ -94,6 +253,13 @@ const changeUserPassword = async (userId, { currentPassword, newPassword }) => {
   user.password = hashedPassword;
   await user.save();
 
+  logSecurityEvent({
+    type: "ADMIN_PASSWORD_CHANGE",
+    title: "Admin Security Credentials Updated",
+    detail: `Password updated for user (${user.email})`,
+    severity: "warning"
+  });
+
   return { message: "Password updated successfully" };
 };
 
@@ -114,20 +280,15 @@ const requestForgotPassword = async (emailInput) => {
   user.resetPasswordExpires = expiration;
   await user.save();
 
+  const emailHtml = buildPasswordResetEmailHtml({
+    name: user.name,
+    otpCode
+  });
+
   const emailResult = await sendEmail({
     to: user.email,
-    subject: "PushForge Admin Password Reset Code",
-    html: `
-      <div style="font-family: sans-serif; padding: 20px; color: #0f172a;">
-        <h2>PushForge Admin Password Reset</h2>
-        <p>You requested a password reset for your self-hosted PushForge instance.</p>
-        <p>Your 6-digit verification code is:</p>
-        <div style="font-size: 28px; font-weight: bold; letter-spacing: 4px; color: #2563eb; background: #f8fafc; padding: 12px 20px; border-radius: 8px; display: inline-block; margin: 10px 0;">
-          ${otpCode}
-        </div>
-        <p style="color: #64748b; font-size: 14px;">This code will expire in 15 minutes.</p>
-      </div>
-    `
+    subject: `${getBrandName()} Admin Password Reset Code`,
+    html: emailHtml
   });
 
   return {
@@ -157,6 +318,13 @@ const resetPasswordWithToken = async ({ email, token, newPassword }) => {
   user.resetPasswordExpires = null;
   await user.save();
 
+  logSecurityEvent({
+    type: "ADMIN_PASSWORD_CHANGE",
+    title: "Admin Password Reset via OTP",
+    detail: `Password reset successfully completed for (${user.email})`,
+    severity: "warning"
+  });
+
   return { message: "Admin password successfully reset. You can now log in." };
 };
 
@@ -182,6 +350,8 @@ const formatUserResponse = (user) => {
 module.exports = {
   seedDefaultAdmin,
   registerUser,
+  verifyEmailOtp,
+  resendVerificationOtp,
   loginUser,
   getUserProfile,
   changeUserPassword,
