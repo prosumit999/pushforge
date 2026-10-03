@@ -640,11 +640,103 @@ const getPaymentStats = async () => {
   };
 };
 
-const getSecurityLogs = async () => {
+const getAffiliatesAndPromoMetrics = async () => {
+  const { User, PromoCode } = require("../Models");
+  const users = await User.find({}).select("name email affiliateCode affiliateClicks affiliateSignups affiliateSales affiliateEarnings createdAt").sort({ affiliateSignups: -1 });
+  const promoCodes = await PromoCode.find({}).populate("ownerUser", "name email").sort({ createdAt: -1 });
+
+  const totalClicks = users.reduce((acc, u) => acc + (u.affiliateClicks || 0), 0);
+  const totalSignups = users.reduce((acc, u) => acc + (u.affiliateSignups || 0), 0);
+  const totalSales = users.reduce((acc, u) => acc + (u.affiliateSales || 0), 0);
+  const totalEarnings = users.reduce((acc, u) => acc + (u.affiliateEarnings || 0), 0);
+
   return {
-    logs: securityAuditLogs,
-    activeThreatsCount: securityAuditLogs.filter((l) => l.severity === "danger").length
+    overview: {
+      totalPromoCodes: promoCodes.length,
+      totalClicks,
+      totalSignups,
+      totalSales,
+      totalEarnings
+    },
+    users: users.map((u) => ({
+      id: u._id,
+      name: u.name,
+      email: u.email,
+      affiliateCode: u.affiliateCode || "N/A",
+      referralLink: u.affiliateCode ? `${process.env.APP_URL || "https://purplepush.com"}?ref=${u.affiliateCode}` : "N/A",
+      clicks: u.affiliateClicks || 0,
+      signups: u.affiliateSignups || 0,
+      sales: u.affiliateSales || 0,
+      earnings: u.affiliateEarnings || 0,
+      joinedAt: u.createdAt
+    })),
+    promoCodes: promoCodes.map((p) => ({
+      id: p._id,
+      code: p.code,
+      discountType: p.discountType,
+      discountValue: p.discountValue,
+      createdByType: p.createdByType,
+      creatorName: p.ownerUser ? p.ownerUser.name : "Superadmin (Global)",
+      usageCount: p.usageCount || 0,
+      maxUsage: p.maxUsage || "Unlimited",
+      salesGenerated: p.salesGenerated || 0,
+      isActive: p.isActive,
+      expiresAt: p.expiresAt
+    }))
   };
+};
+
+const createSuperadminPromoCode = async ({ code, discountType, discountValue, maxUsage, expiresAt }) => {
+  const { PromoCode } = require("../Models");
+  if (!code || !discountValue) {
+    throw new Error("Promo code name and discount value are required");
+  }
+
+  const formattedCode = code.trim().toUpperCase();
+  const existing = await PromoCode.findOne({ code: formattedCode });
+  if (existing) {
+    throw new Error(`Promo code "${formattedCode}" already exists`);
+  }
+
+  const promo = await PromoCode.create({
+    code: formattedCode,
+    discountType: discountType || "percentage",
+    discountValue: Number(discountValue),
+    maxUsage: maxUsage ? Number(maxUsage) : null,
+    expiresAt: expiresAt ? new Date(expiresAt) : null,
+    createdByType: "superadmin",
+    isActive: true
+  });
+
+  logSecurityEvent({
+    type: "SUPERADMIN_PROMO_CREATED",
+    title: "Custom Promo Code Created",
+    detail: `Created promo code ${formattedCode} with ${discountValue}${discountType === "percentage" ? "%" : "$"} discount`,
+    severity: "info"
+  });
+
+  return promo;
+};
+
+const togglePromoCodeStatus = async (id) => {
+  const { PromoCode } = require("../Models");
+  const promo = await PromoCode.findById(id);
+  if (!promo) {
+    throw new Error("Promo code not found");
+  }
+  promo.isActive = !promo.isActive;
+  await promo.save();
+  return promo;
+};
+
+const deletePromoCode = async (id) => {
+  const { PromoCode } = require("../Models");
+  await PromoCode.findByIdAndDelete(id);
+  return { message: "Promo code deleted successfully" };
+};
+
+const getSecurityLogs = async () => {
+  return { logs: securityAuditLogs, total: securityAuditLogs.length };
 };
 
 module.exports = {
@@ -659,5 +751,9 @@ module.exports = {
   getAllNotifications,
   getPaymentStats,
   getSecurityLogs,
-  logSecurityEvent
+  logSecurityEvent,
+  getAffiliatesAndPromoMetrics,
+  createSuperadminPromoCode,
+  togglePromoCodeStatus,
+  deletePromoCode
 };

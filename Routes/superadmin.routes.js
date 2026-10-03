@@ -20,6 +20,10 @@ router.post("/subscribers/import", superadminController.importSubscribers);
 router.get("/notifications", superadminController.getNotifications);
 router.get("/payments", superadminController.getPayments);
 router.get("/security", superadminController.getSecurity);
+router.get("/affiliates", superadminController.getAffiliateMetrics);
+router.post("/promo-codes", superadminController.createPromoCode);
+router.put("/promo-codes/:id/toggle", superadminController.togglePromoCode);
+router.delete("/promo-codes/:id", superadminController.deletePromoCode);
 router.post("/logout", superadminController.logout);
 
 module.exports = router;

@@ -52,6 +52,37 @@ const userSchema = new mongoose.Schema(
     resetPasswordExpires: {
       type: Date,
       default: null
+    },
+
+    // ── Affiliate & Referral Program Fields ──
+    affiliateCode: {
+      type: String,
+      uppercase: true,
+      trim: true,
+      maxlength: 5,
+      minlength: 5,
+      default: null
+    },
+    affiliateClicks: {
+      type: Number,
+      default: 0
+    },
+    affiliateSignups: {
+      type: Number,
+      default: 0
+    },
+    affiliateSales: {
+      type: Number,
+      default: 0
+    },
+    affiliateEarnings: {
+      type: Number,
+      default: 0
+    },
+    referredBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      default: null
     }
   },
   {

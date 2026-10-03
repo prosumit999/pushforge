@@ -20,6 +20,7 @@ const notificationRoutes = require("./Routes/notification.routes");
 const analyticsRoutes = require("./Routes/analytics.routes");
 const emailRoutes = require("./Routes/email.routes");
 const superadminRoutes = require("./Routes/superadmin.routes");
+const affiliateRoutes = require("./Routes/affiliate.routes");
 
 const app = express();
 
@@ -136,6 +137,7 @@ app.use("/api/v1/notifications", notificationRoutes);
 app.use("/api/v1/analytics", analyticsRoutes);
 app.use("/api/v1/collected-emails", emailRoutes);
 app.use("/api/v1/superadmin", superadminRoutes);
+app.use("/api/v1/affiliate", affiliateRoutes);
 
 
 app.use((req, res) => {

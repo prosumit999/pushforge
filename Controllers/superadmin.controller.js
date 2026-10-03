@@ -138,6 +138,51 @@ const getSecurity = async (req, res, next) => {
   }
 };
 
+const getAffiliateMetrics = async (req, res, next) => {
+  try {
+    const data = await superadminService.getAffiliatesAndPromoMetrics();
+    res.status(200).json(data);
+  } catch (error) {
+    next(error);
+  }
+};
+
+const createPromoCode = async (req, res, next) => {
+  try {
+    const { code, discountType, discountValue, maxUsage, expiresAt } = req.body;
+    const promo = await superadminService.createSuperadminPromoCode({
+      code,
+      discountType,
+      discountValue,
+      maxUsage,
+      expiresAt
+    });
+    res.status(201).json({ message: "Promo code created successfully", promo });
+  } catch (error) {
+    next(error);
+  }
+};
+
+const togglePromoCode = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const promo = await superadminService.togglePromoCodeStatus(id);
+    res.status(200).json({ message: "Promo code status updated", promo });
+  } catch (error) {
+    next(error);
+  }
+};
+
+const deletePromoCode = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const result = await superadminService.deletePromoCode(id);
+    res.status(200).json(result);
+  } catch (error) {
+    next(error);
+  }
+};
+
 const logout = async (req, res) => {
   res.clearCookie("superadminToken");
   res.status(200).json({ message: "Superadmin logged out successfully" });
@@ -156,5 +201,9 @@ module.exports = {
   getNotifications,
   getPayments,
   getSecurity,
+  getAffiliateMetrics,
+  createPromoCode,
+  togglePromoCode,
+  deletePromoCode,
   logout
 };
