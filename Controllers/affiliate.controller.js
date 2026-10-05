@@ -1,4 +1,5 @@
 const { User, PromoCode, PayoutRequest, AffiliateTransaction } = require("../Models");
+const { normalizePlanName } = require("../Utils/planUtils");
 
 const generateRandom5Char = () => {
   const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
@@ -317,7 +318,7 @@ const processCheckout = async (req, res, next) => {
     }
 
     // Update customer's plan
-    user.plan = planName;
+    user.plan = normalizePlanName(planName);
     await user.save();
 
     res.status(200).json({

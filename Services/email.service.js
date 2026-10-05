@@ -202,8 +202,126 @@ const buildPasswordResetEmailHtml = ({ name = "Admin", otpCode }) => {
   `;
 };
 
+const buildPaymentReceiptEmailHtml = ({ name, invoiceNumber, planName, amount, date, paymentMethod }) => {
+  const brandName = process.env.APP_NAME || process.env.BRAND_NAME || "PushForge";
+  return `
+    <!DOCTYPE html>
+    <html>
+    <head><meta charset="utf-8"><title>Payment Receipt - ${invoiceNumber}</title></head>
+    <body style="margin: 0; padding: 0; background-color: #0f172a; font-family: sans-serif; color: #334155;">
+      <table border="0" cellpadding="0" cellspacing="0" width="100%" style="padding: 40px 0;">
+        <tr><td align="center">
+          <table border="0" cellpadding="0" cellspacing="0" width="100%" style="max-width: 580px; background: #ffffff; border-radius: 12px; overflow: hidden;">
+            <tr>
+              <td align="center" style="background: linear-gradient(135deg, #7c3aed 0%, #6d28d9 100%); padding: 30px; color: #fff;">
+                <h1 style="margin: 0; font-size: 22px;">Payment Receipt</h1>
+                <p style="margin: 6px 0 0 0; opacity: 0.9; font-size: 14px;">Invoice ${invoiceNumber}</p>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding: 30px;">
+                <p style="font-size: 15px; color: #0f172a;">Hello <strong>${name}</strong>,</p>
+                <p style="font-size: 14px; color: #475569;">Thank you for your purchase! Here is your payment summary for upgrading to <strong>${planName}</strong>:</p>
+                <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 16px; margin: 20px 0;">
+                  <div style="display: flex; justify-content: space-between; margin-bottom: 8px; font-size: 14px;"><span>Invoice Number:</span><strong>${invoiceNumber}</strong></div>
+                  <div style="display: flex; justify-content: space-between; margin-bottom: 8px; font-size: 14px;"><span>Plan Tier:</span><strong>${planName}</strong></div>
+                  <div style="display: flex; justify-content: space-between; margin-bottom: 8px; font-size: 14px;"><span>Payment Method:</span><strong style="text-transform: uppercase;">${paymentMethod}</strong></div>
+                  <div style="display: flex; justify-content: space-between; font-size: 16px; font-weight: 800; color: #7c3aed; padding-top: 8px; border-top: 1px solid #cbd5e1;"><span>Total Amount Paid:</span><span>$${Number(amount).toFixed(2)} USD</span></div>
+                </div>
+                <p style="font-size: 13px; color: #64748b;">You can view and download full HTML receipts in your account dashboard anytime.</p>
+              </td>
+            </tr>
+          </table>
+        </td></tr>
+      </table>
+    </body>
+    </html>
+  `;
+};
+
+const buildQuotaWarningEmailHtml = ({ name, websiteName, currentCount, maxLimit }) => {
+  const brandName = process.env.APP_NAME || process.env.BRAND_NAME || "PushForge";
+  const pct = Math.round((currentCount / maxLimit) * 100);
+  return `
+    <!DOCTYPE html>
+    <html>
+    <head><meta charset="utf-8"><title>Subscriber Quota Alert</title></head>
+    <body style="margin: 0; padding: 0; background-color: #0f172a; font-family: sans-serif;">
+      <table border="0" cellpadding="0" cellspacing="0" width="100%" style="padding: 40px 0;">
+        <tr><td align="center">
+          <table border="0" cellpadding="0" cellspacing="0" width="100%" style="max-width: 580px; background: #ffffff; border-radius: 12px; overflow: hidden;">
+            <tr>
+              <td align="center" style="background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%); padding: 26px; color: #fff;">
+                <h1 style="margin: 0; font-size: 20px;">Subscriber Quota Alert (${pct}%)</h1>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding: 30px;">
+                <p style="font-size: 15px; color: #0f172a;">Hello <strong>${name}</strong>,</p>
+                <p style="font-size: 14px; color: #475569;">Your website <strong>${websiteName}</strong> has reached <strong>${currentCount}</strong> of <strong>${maxLimit}</strong> push subscribers (${pct}% of limit).</p>
+                <p style="font-size: 14px; color: #475569;">Consider upgrading your license plan to maintain uninterrupted push notification delivery to all visitors.</p>
+              </td>
+            </tr>
+          </table>
+        </td></tr>
+      </table>
+    </body>
+    </html>
+  `;
+};
+
+const buildWeeklyDigestEmailHtml = ({ name, totalSubscribers, totalSent, totalClicks, avgCtr }) => {
+  const brandName = process.env.APP_NAME || process.env.BRAND_NAME || "PushForge";
+  return `
+    <!DOCTYPE html>
+    <html>
+    <head><meta charset="utf-8"><title>Weekly Analytics Digest</title></head>
+    <body style="margin: 0; padding: 0; background-color: #0f172a; font-family: sans-serif;">
+      <table border="0" cellpadding="0" cellspacing="0" width="100%" style="padding: 40px 0;">
+        <tr><td align="center">
+          <table border="0" cellpadding="0" cellspacing="0" width="100%" style="max-width: 580px; background: #ffffff; border-radius: 12px; overflow: hidden;">
+            <tr>
+              <td align="center" style="background: linear-gradient(135deg, #0f172a 0%, #1e1b4b 100%); padding: 30px; color: #fff; border-bottom: 3px solid #7c3aed;">
+                <h1 style="margin: 0; font-size: 20px;">Weekly Push Analytics Digest</h1>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding: 30px;">
+                <p style="font-size: 15px; color: #0f172a;">Hello <strong>${name}</strong>,</p>
+                <p style="font-size: 14px; color: #475569;">Here is your weekly performance summary for your Web Push Notifications:</p>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 20px 0;">
+                  <div style="background: #f8fafc; padding: 14px; border-radius: 8px; border: 1px solid #e2e8f0;">
+                    <span style="font-size: 12px; color: #64748b; display: block;">Total Push Subscribers</span>
+                    <strong style="font-size: 20px; color: #7c3aed;">${totalSubscribers}</strong>
+                  </div>
+                  <div style="background: #f8fafc; padding: 14px; border-radius: 8px; border: 1px solid #e2e8f0;">
+                    <span style="font-size: 12px; color: #64748b; display: block;">Notifications Sent</span>
+                    <strong style="font-size: 20px; color: #0f172a;">${totalSent}</strong>
+                  </div>
+                  <div style="background: #f8fafc; padding: 14px; border-radius: 8px; border: 1px solid #e2e8f0;">
+                    <span style="font-size: 12px; color: #64748b; display: block;">Total Clicks</span>
+                    <strong style="font-size: 20px; color: #10b981;">${totalClicks}</strong>
+                  </div>
+                  <div style="background: #f8fafc; padding: 14px; border-radius: 8px; border: 1px solid #e2e8f0;">
+                    <span style="font-size: 12px; color: #64748b; display: block;">Average CTR</span>
+                    <strong style="font-size: 20px; color: #3b82f6;">${avgCtr}%</strong>
+                  </div>
+                </div>
+              </td>
+            </tr>
+          </table>
+        </td></tr>
+      </table>
+    </body>
+    </html>
+  `;
+};
+
 module.exports = {
   sendEmail,
   buildVerificationEmailHtml,
-  buildPasswordResetEmailHtml
+  buildPasswordResetEmailHtml,
+  buildPaymentReceiptEmailHtml,
+  buildQuotaWarningEmailHtml,
+  buildWeeklyDigestEmailHtml
 };

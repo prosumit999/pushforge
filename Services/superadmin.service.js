@@ -5,6 +5,7 @@ const Subscriber = require("../Models/Subscriber");
 const Notification = require("../Models/Notification");
 const NotificationLog = require("../Models/NotificationLog");
 const { sendEmail } = require("./email.service");
+const { normalizePlanName } = require("../Utils/planUtils");
 
 // In-memory OTP storage & 20-min grace period tracking for Superadmin 2FA
 let superadminOtpStore = {
@@ -283,7 +284,7 @@ const getOverviewStats = async () => {
   let selfHostedCount = 0;
 
   users.forEach((u) => {
-    const plan = u.plan || "Starter";
+    const plan = normalizePlanName(u.plan);
     if (plan === "Starter") {
       starterCount++;
       totalRevenue += 30;
@@ -351,9 +352,7 @@ const updateUserPlan = async (userId, { plan, status }) => {
   if (!user) throw new Error("User not found");
 
   if (plan) {
-    const validPlans = ["Starter", "Business Pro", "Agency", "Self-Hosted"];
-    if (!validPlans.includes(plan)) throw new Error("Invalid plan specified");
-    user.plan = plan;
+    user.plan = normalizePlanName(plan);
   }
 
   if (status) {

@@ -9,6 +9,7 @@ const AnalyticsEvent = require("./AnalyticsEvent");
 const PromoCode = require("./PromoCode");
 const PayoutRequest = require("./PayoutRequest");
 const AffiliateTransaction = require("./AffiliateTransaction");
+const Invoice = require("./Invoice");
 
 module.exports = {
   User,
@@ -21,5 +22,6 @@ module.exports = {
   AnalyticsEvent,
   PromoCode,
   PayoutRequest,
-  AffiliateTransaction
+  AffiliateTransaction,
+  Invoice
 };

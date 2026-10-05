@@ -25,7 +25,6 @@ const userSchema = new mongoose.Schema(
     },
     plan: {
       type: String,
-      enum: ["Starter", "Business Pro", "Agency", "Self-Hosted"],
       default: "Starter"
     },
     status: {

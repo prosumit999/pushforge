@@ -21,6 +21,7 @@ const analyticsRoutes = require("./Routes/analytics.routes");
 const emailRoutes = require("./Routes/email.routes");
 const superadminRoutes = require("./Routes/superadmin.routes");
 const affiliateRoutes = require("./Routes/affiliate.routes");
+const paymentRoutes = require("./Routes/payment.routes");
 
 const app = express();
 
@@ -138,6 +139,7 @@ app.use("/api/v1/analytics", analyticsRoutes);
 app.use("/api/v1/collected-emails", emailRoutes);
 app.use("/api/v1/superadmin", superadminRoutes);
 app.use("/api/v1/affiliate", affiliateRoutes);
+app.use("/api/v1/payment", paymentRoutes);
 
 
 app.use((req, res) => {
@@ -154,12 +156,14 @@ app.use((err, req, res, next) => {
 
 const schedulerService = require("./Services/scheduler.service");
 const queueWorker = require("./Services/queue.worker");
+const weeklyDigestWorker = require("./Services/weeklyDigest.worker");
 
 const start = async () => {
   try {
     await connectDB();
     schedulerService.startScheduler();
     queueWorker.startQueueWorker();
+    weeklyDigestWorker.startWeeklyDigestWorker();
     const PORT = process.env.PORT || 5000;
     app.listen(PORT, () => {
       console.log(`PushForge backend running on port ${PORT}`);
