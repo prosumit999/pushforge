@@ -91,40 +91,86 @@ const verifyRazorpayPayment = async (req, res, next) => {
       currency = "INR"
     } = req.body;
 
-    const secret = process.env.RAZORPAY_KEY_SECRET || "PushForgeSecret2026Key";
-    let isValidSignature = true;
+    if (!razorpay_order_id || !razorpay_payment_id || !razorpay_signature) {
+      return res.status(400).json({
+        success: false,
+        message: "Missing mandatory Razorpay payment verification parameters (order_id, payment_id, signature)"
+      });
+    }
 
-    if (razorpay_signature && !razorpay_order_id.startsWith("order_test_")) {
-      const body = razorpay_order_id + "|" + razorpay_payment_id;
-      const expectedSignature = crypto
-        .createHmac("sha256", secret)
-        .update(body.toString())
-        .digest("hex");
-      isValidSignature = expectedSignature === razorpay_signature;
+    const secret = process.env.RAZORPAY_KEY_SECRET;
+    const isProduction = process.env.NODE_ENV === "production";
+
+    if (isProduction && !secret) {
+      return res.status(500).json({
+        success: false,
+        message: "Server configuration error: RAZORPAY_KEY_SECRET missing in production"
+      });
+    }
+
+    const effectiveSecret = secret || "PushForgeSecret2026Key";
+
+    // Strict HMAC SHA256 Signature Verification
+    const bodyData = razorpay_order_id + "|" + razorpay_payment_id;
+    const expectedSignature = crypto
+      .createHmac("sha256", effectiveSecret)
+      .update(bodyData.toString())
+      .digest("hex");
+
+    let isValidSignature = false;
+    try {
+      isValidSignature = crypto.timingSafeEqual(
+        Buffer.from(expectedSignature, "utf8"),
+        Buffer.from(razorpay_signature, "utf8")
+      );
+    } catch (err) {
+      isValidSignature = false;
+    }
+
+    // Allow test bypass only in non-production environments when orderId starts with order_test_
+    if (!isValidSignature && !isProduction && razorpay_order_id.startsWith("order_test_")) {
+      console.warn("⚠️ [DEV NOTICE] Allowing order_test_ fallback payment signature in non-production mode.");
+      isValidSignature = true;
     }
 
     if (!isValidSignature) {
-      return res.status(400).json({ success: false, message: "Invalid Razorpay payment signature" });
+      return res.status(400).json({
+        success: false,
+        message: "Razorpay payment signature verification failed. Invalid HMAC signature."
+      });
     }
 
-    // Create Invoice & Record Payment
     const userId = req.user ? req.user.id : null;
     let invoice = null;
 
     if (userId) {
+      // Check for duplicate invoice processing
+      const existingInvoices = await paymentService.getUserInvoices(userId);
+      const duplicate = existingInvoices.find((inv) => inv.paymentId === razorpay_payment_id);
+
+      if (duplicate) {
+        return res.status(200).json({
+          success: true,
+          message: "Razorpay payment already processed",
+          paymentId: razorpay_payment_id,
+          orderId: razorpay_order_id,
+          invoice: duplicate
+        });
+      }
+
       invoice = await paymentService.createInvoice({
         userId,
         planName,
         amount: Number(amount),
         paymentMethod: "razorpay",
-        paymentId: razorpay_payment_id || `pay_${Date.now()}`
+        paymentId: razorpay_payment_id
       });
     }
 
     return res.status(200).json({
       success: true,
       message: "Razorpay payment verified successfully!",
-      paymentId: razorpay_payment_id || `pay_${Date.now()}`,
+      paymentId: razorpay_payment_id,
       orderId: razorpay_order_id,
       invoice
     });
@@ -135,23 +181,45 @@ const verifyRazorpayPayment = async (req, res, next) => {
 
 const handleStripeWebhook = async (req, res, next) => {
   try {
-    const event = req.body;
-    console.log(`Stripe webhook received: ${event.type}`);
+    const sig = req.headers["stripe-signature"];
+    const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
+    let event = req.body;
+
+    if (webhookSecret) {
+      if (!sig || !req.rawBody) {
+        return res.status(400).json({ error: "Missing Stripe signature header or raw request body" });
+      }
+      try {
+        const Stripe = require("stripe");
+        const stripe = Stripe(process.env.STRIPE_SECRET_KEY);
+        event = stripe.webhooks.constructEvent(req.rawBody, sig, webhookSecret);
+      } catch (err) {
+        console.error("Stripe Webhook Signature Verification Failed:", err.message);
+        return res.status(400).json({ error: `Webhook Signature Verification Failed: ${err.message}` });
+      }
+    } else if (process.env.NODE_ENV === "production") {
+      return res.status(400).json({ error: "Stripe webhook signature verification requires STRIPE_WEBHOOK_SECRET in production" });
+    }
 
     if (event.type === "checkout.session.completed" || event.type === "payment_intent.succeeded") {
       const session = event.data.object;
       const userId = session.client_reference_id || session.metadata?.userId;
       const planName = session.metadata?.planName || "Business Pro";
       const amount = (session.amount_total || session.amount || 10000) / 100;
+      const paymentId = session.id || session.payment_intent;
 
-      if (userId) {
-        await paymentService.createInvoice({
-          userId,
-          planName,
-          amount,
-          paymentMethod: "stripe",
-          paymentId: session.id || session.payment_intent
-        });
+      if (userId && paymentId) {
+        const userInvoices = await paymentService.getUserInvoices(userId);
+        const duplicate = userInvoices.find((inv) => inv.paymentId === paymentId);
+        if (!duplicate) {
+          await paymentService.createInvoice({
+            userId,
+            planName,
+            amount,
+            paymentMethod: "stripe",
+            paymentId
+          });
+        }
       }
     }
 

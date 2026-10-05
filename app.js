@@ -5,11 +5,15 @@ const cors = require("cors");
 const cookieParser = require("cookie-parser");
 const mongoose = require("mongoose");
 const connectDB = require("./Config/db.config");
+const { validateEnvironment } = require("./Config/env.config");
 const {
   securityMiddleware,
   productionAuthLimiter,
   productionPublicLimiter
 } = require("./Middlewares/security.middleware");
+
+// Fail-fast Environment Validation for Production Security
+validateEnvironment();
 
 const authRoutes = require("./Routes/auth.routes");
 const websiteRoutes = require("./Routes/website.routes");
@@ -51,7 +55,13 @@ app.use(
   })
 );
 
-app.use(express.json());
+app.use(
+  express.json({
+    verify: (req, res, buf) => {
+      req.rawBody = buf;
+    }
+  })
+);
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
 

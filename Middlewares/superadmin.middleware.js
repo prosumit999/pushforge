@@ -11,7 +11,12 @@ const requireSuperadmin = (req, res, next) => {
       return res.status(401).json({ error: "Superadmin authentication required. Token missing." });
     }
 
-    const decoded = jwt.verify(token, process.env.JWT_SECRET || "supersecretkey_change_me_in_production");
+    const jwtSecret = process.env.JWT_SECRET || (process.env.NODE_ENV !== "production" ? "supersecretkey_change_me_in_production" : null);
+    if (!jwtSecret) {
+      return res.status(500).json({ error: "Server authentication error: JWT_SECRET environment variable missing" });
+    }
+
+    const decoded = jwt.verify(token, jwtSecret);
 
     if (decoded.role !== "superadmin" || decoded.email !== "prosumit999@gmail.com") {
       return res.status(403).json({ error: "Access denied: Superadmin credentials required." });

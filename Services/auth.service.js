@@ -371,7 +371,10 @@ const resetPasswordWithToken = async ({ email, token, newPassword }) => {
 };
 
 const generateToken = (user) => {
-  const jwtSecret = process.env.JWT_SECRET || "supersecretkey_change_me_in_production";
+  const jwtSecret = process.env.JWT_SECRET || (process.env.NODE_ENV !== "production" ? "supersecretkey_change_me_in_production" : null);
+  if (!jwtSecret) {
+    throw new Error("Server configuration error: JWT_SECRET environment variable missing in production");
+  }
   return jwt.sign(
     { id: user._id, email: user.email, role: user.role },
     jwtSecret,

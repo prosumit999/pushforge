@@ -1,4 +1,4 @@
-const { User, PromoCode, PayoutRequest, AffiliateTransaction } = require("../Models");
+const { User, PromoCode, PayoutRequest, AffiliateTransaction, Invoice } = require("../Models");
 const { normalizePlanName } = require("../Utils/planUtils");
 
 const generateRandom5Char = () => {
@@ -242,11 +242,10 @@ const requestPayout = async (req, res, next) => {
 // 5. Process Plan Checkout & Credit Affiliate
 const processCheckout = async (req, res, next) => {
   try {
-    const { planId, planName, price, promoCode } = req.body;
-    const basePrice = Number(price) || 0;
+    const { planId, planName, price, promoCode, paymentId, invoiceId } = req.body;
 
-    if (!planName) {
-      return res.status(400).json({ error: "Plan name is required" });
+    if (!paymentId && !invoiceId) {
+      return res.status(400).json({ error: "Verified payment ID or invoice ID is required for checkout processing" });
     }
 
     const user = await User.findById(req.user.id);
@@ -254,6 +253,28 @@ const processCheckout = async (req, res, next) => {
       return res.status(404).json({ error: "User not found" });
     }
 
+    // Verify payment invoice exists and belongs to this user
+    let verifiedInvoice = null;
+    if (invoiceId) {
+      verifiedInvoice = await Invoice.findOne({ _id: invoiceId, user: user._id, status: "paid" });
+    } else if (paymentId) {
+      verifiedInvoice = await Invoice.findOne({ paymentId, user: user._id, status: "paid" });
+    }
+
+    if (!verifiedInvoice) {
+      return res.status(400).json({ error: "No verified paid invoice found for the specified payment" });
+    }
+
+    // Deduplicate: check if affiliate commission was already recorded for this invoice/paymentId
+    const existingTx = await AffiliateTransaction.findOne({ paymentId: verifiedInvoice.paymentId || String(verifiedInvoice._id) });
+    if (existingTx) {
+      return res.status(200).json({
+        message: "Affiliate transaction already recorded for this payment",
+        plan: user.plan
+      });
+    }
+
+    const basePrice = verifiedInvoice.amount || Number(price) || 0;
     let discountAmount = 0;
     let promo = null;
     let affiliateUser = null;
@@ -269,12 +290,10 @@ const processCheckout = async (req, res, next) => {
           discountAmount = promo.discountValue;
         }
 
-        // Identify owner/affiliate
         if (promo.ownerUser) {
           affiliateUser = await User.findById(promo.ownerUser);
         }
 
-        // Increment promo usage
         promo.usageCount = (promo.usageCount || 0) + 1;
         const finalPrice = Math.max(0, basePrice - discountAmount);
         promo.salesGenerated = (promo.salesGenerated || 0) + finalPrice;
@@ -282,7 +301,6 @@ const processCheckout = async (req, res, next) => {
       }
     }
 
-    // Fallback to referredBy if no promo code owner found
     if (!affiliateUser && user.referredBy) {
       affiliateUser = await User.findById(user.referredBy);
     }
@@ -290,24 +308,23 @@ const processCheckout = async (req, res, next) => {
     const finalAmount = Math.max(0, basePrice - discountAmount);
     let commissionAmount = 0;
 
+    // Prevent self-referral / self-commission fraud
     if (affiliateUser && String(affiliateUser._id) !== String(user._id)) {
-      // 30% lifetime commission
       commissionAmount = Math.round((finalAmount * 0.3) * 100) / 100;
 
-      // Create transaction record
       await AffiliateTransaction.create({
         affiliateUser: affiliateUser._id,
         referredUser: user._id,
         promoCode: promo ? promo.code : "",
         planId: planId || "plan",
-        planName,
+        planName: verifiedInvoice.planName || planName,
         saleAmount: finalAmount,
         discountAmount,
         commissionAmount,
+        paymentId: verifiedInvoice.paymentId || String(verifiedInvoice._id),
         status: "settled"
       });
 
-      // Update affiliate stats
       affiliateUser.affiliateSales = (affiliateUser.affiliateSales || 0) + finalAmount;
       affiliateUser.affiliateEarnings = (affiliateUser.affiliateEarnings || 0) + commissionAmount;
       if (!user.referredBy) {
@@ -317,12 +334,8 @@ const processCheckout = async (req, res, next) => {
       await affiliateUser.save();
     }
 
-    // Update customer's plan
-    user.plan = normalizePlanName(planName);
-    await user.save();
-
     res.status(200).json({
-      message: `Successfully upgraded to ${planName}!`,
+      message: `Successfully processed affiliate credit for ${verifiedInvoice.planName || planName}`,
       plan: user.plan,
       basePrice,
       discountAmount,

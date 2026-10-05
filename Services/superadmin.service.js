@@ -132,7 +132,10 @@ const loginSuperadmin = async ({ email, password, ip = "127.0.0.1" }) => {
       ip
     });
 
-    const secret = process.env.JWT_SECRET || "supersecretkey_change_me_in_production";
+    const secret = process.env.JWT_SECRET || (process.env.NODE_ENV !== "production" ? "supersecretkey_change_me_in_production" : null);
+    if (!secret) {
+      throw new Error("Server configuration error: JWT_SECRET environment variable missing in production");
+    }
     const token = jwt.sign(
       {
         id: "superadmin_root",
@@ -238,7 +241,10 @@ const verifySuperadminOtp = async ({ email, otpCode, ip = "127.0.0.1" }) => {
     ip
   });
 
-  const secret = process.env.JWT_SECRET || "supersecretkey_change_me_in_production";
+  const secret = process.env.JWT_SECRET || (process.env.NODE_ENV !== "production" ? "supersecretkey_change_me_in_production" : null);
+  if (!secret) {
+    throw new Error("Server configuration error: JWT_SECRET environment variable missing in production");
+  }
   const token = jwt.sign(
     {
       id: "superadmin_root",

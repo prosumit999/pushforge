@@ -14,7 +14,10 @@ const authenticate = (req, res, next) => {
       return res.status(401).json({ error: "Authentication token required" });
     }
 
-    const jwtSecret = process.env.JWT_SECRET || "supersecretkey_change_me_in_production";
+    const jwtSecret = process.env.JWT_SECRET || (process.env.NODE_ENV !== "production" ? "supersecretkey_change_me_in_production" : null);
+    if (!jwtSecret) {
+      return res.status(500).json({ error: "Server authentication error: JWT_SECRET environment variable missing" });
+    }
     const decoded = jwt.verify(token, jwtSecret);
     req.user = decoded;
     next();

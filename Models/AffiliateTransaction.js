@@ -41,6 +41,10 @@ const affiliateTransactionSchema = new mongoose.Schema(
       type: String,
       enum: ["pending", "settled"],
       default: "settled"
+    },
+    paymentId: {
+      type: String,
+      default: ""
     }
   },
   {
