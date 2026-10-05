@@ -24,6 +24,8 @@ router.get("/affiliates", superadminController.getAffiliateMetrics);
 router.post("/promo-codes", superadminController.createPromoCode);
 router.put("/promo-codes/:id/toggle", superadminController.togglePromoCode);
 router.delete("/promo-codes/:id", superadminController.deletePromoCode);
+router.get("/payouts", superadminController.getPayoutRequests);
+router.put("/payouts/:id/status", (req, res, next) => superadminController.updatePayoutStatus(req.params.id, req, res, next));
 router.post("/logout", superadminController.logout);
 
 module.exports = router;

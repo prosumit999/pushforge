@@ -183,6 +183,29 @@ const deletePromoCode = async (req, res, next) => {
   }
 };
 
+const getPayoutRequests = async (req, res, next) => {
+  try {
+    const requests = await superadminService.getPayoutRequests();
+    res.status(200).json(requests);
+  } catch (error) {
+    next(error);
+  }
+};
+
+const updatePayoutStatus = async (id, req, res, next) => {
+  try {
+    const { status, transactionId, rejectionReason } = req.body;
+    const reqItem = await superadminService.updatePayoutStatus(req.params.id, {
+      status,
+      transactionId,
+      rejectionReason
+    });
+    res.status(200).json({ message: "Payout status updated successfully", reqItem });
+  } catch (error) {
+    next(error);
+  }
+};
+
 const logout = async (req, res) => {
   res.clearCookie("superadminToken");
   res.status(200).json({ message: "Superadmin logged out successfully" });
@@ -205,5 +228,7 @@ module.exports = {
   createPromoCode,
   togglePromoCode,
   deletePromoCode,
+  getPayoutRequests,
+  updatePayoutStatus,
   logout
 };

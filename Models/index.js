@@ -7,6 +7,8 @@ const NotificationLog = require("./NotificationLog");
 const DispatchJob = require("./DispatchJob");
 const AnalyticsEvent = require("./AnalyticsEvent");
 const PromoCode = require("./PromoCode");
+const PayoutRequest = require("./PayoutRequest");
+const AffiliateTransaction = require("./AffiliateTransaction");
 
 module.exports = {
   User,
@@ -17,5 +19,7 @@ module.exports = {
   NotificationLog,
   DispatchJob,
   AnalyticsEvent,
-  PromoCode
+  PromoCode,
+  PayoutRequest,
+  AffiliateTransaction
 };

@@ -6,6 +6,9 @@ const authMiddleware = require("../Middlewares/auth.middleware");
 // Protected User Endpoints
 router.get("/me", authMiddleware, affiliateController.getUserAffiliateDetails);
 router.put("/promo-code", authMiddleware, affiliateController.updateCustomPromoCode);
+router.put("/payout-method", authMiddleware, affiliateController.updatePayoutMethod);
+router.post("/request-payout", authMiddleware, affiliateController.requestPayout);
+router.post("/checkout", authMiddleware, affiliateController.processCheckout);
 
 // Public Endpoints
 router.get("/public/ref/:code", affiliateController.trackReferralClick);

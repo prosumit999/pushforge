@@ -1,4 +1,4 @@
-const { User, PromoCode } = require("../Models");
+const { User, PromoCode, PayoutRequest, AffiliateTransaction } = require("../Models");
 
 const generateRandom5Char = () => {
   const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
@@ -21,7 +21,14 @@ const getUnique5CharAffiliateCode = async () => {
   return "PF" + Math.floor(10 + Math.random() * 90);
 };
 
-// 1. Get current user's affiliate details
+// Helper to mask email for privacy (e.g. s***@gmail.com)
+const maskEmail = (email) => {
+  if (!email || !email.includes("@")) return "u***@domain.com";
+  const [name, domain] = email.split("@");
+  return `${name[0]}***@${domain}`;
+};
+
+// 1. Get current user's affiliate details, transactions & payout requests
 const getUserAffiliateDetails = async (req, res, next) => {
   try {
     let user = await User.findById(req.user.id);
@@ -49,6 +56,26 @@ const getUserAffiliateDetails = async (req, res, next) => {
       }
     }
 
+    // Fetch transactions & payout requests
+    const transactionsList = await AffiliateTransaction.find({ affiliateUser: user._id })
+      .populate("referredUser", "email name")
+      .sort({ createdAt: -1 })
+      .limit(50);
+
+    const formattedTransactions = transactionsList.map((tx) => ({
+      _id: tx._id,
+      date: tx.createdAt,
+      customerEmailMask: maskEmail(tx.referredUser?.email),
+      planId: tx.planId,
+      planName: tx.planName,
+      saleAmount: tx.saleAmount,
+      discountAmount: tx.discountAmount,
+      commissionAmount: tx.commissionAmount,
+      status: tx.status
+    }));
+
+    const payoutRequests = await PayoutRequest.find({ user: user._id }).sort({ createdAt: -1 });
+
     res.status(200).json({
       affiliateCode: user.affiliateCode,
       referralLink: `${process.env.APP_URL || "https://purplepush.com"}?ref=${user.affiliateCode}`,
@@ -56,7 +83,11 @@ const getUserAffiliateDetails = async (req, res, next) => {
       affiliateSignups: user.affiliateSignups || 0,
       affiliateSales: user.affiliateSales || 0,
       affiliateEarnings: user.affiliateEarnings || 0,
-      commissionRate: "30%"
+      commissionRate: "30%",
+      payoutMethod: user.payoutMethod || "none",
+      payoutDetails: user.payoutDetails || {},
+      transactions: formattedTransactions,
+      payoutRequests
     });
   } catch (error) {
     next(error);
@@ -132,7 +163,177 @@ const updateCustomPromoCode = async (req, res, next) => {
   }
 };
 
-// 3. Public Referral Click Tracker
+// 3. Update Payout Method & Details
+const updatePayoutMethod = async (req, res, next) => {
+  try {
+    const { payoutMethod, payoutDetails } = req.body;
+
+    if (!payoutMethod || !["paypal", "stripe", "bank", "upi", "none"].includes(payoutMethod)) {
+      return res.status(400).json({ error: "Invalid payout method selection" });
+    }
+
+    const user = await User.findById(req.user.id);
+    if (!user) {
+      return res.status(404).json({ error: "User not found" });
+    }
+
+    user.payoutMethod = payoutMethod;
+    user.payoutDetails = payoutDetails || {};
+    await user.save();
+
+    res.status(200).json({
+      message: "Payout method updated successfully!",
+      payoutMethod: user.payoutMethod,
+      payoutDetails: user.payoutDetails
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// 4. Request Affiliate Payout
+const requestPayout = async (req, res, next) => {
+  try {
+    const { amount } = req.body;
+    const reqAmount = Number(amount);
+
+    if (!reqAmount || reqAmount < 50) {
+      return res.status(400).json({ error: "Minimum payout threshold is $50" });
+    }
+
+    const user = await User.findById(req.user.id);
+    if (!user) {
+      return res.status(404).json({ error: "User not found" });
+    }
+
+    if (user.payoutMethod === "none" || !user.payoutMethod) {
+      return res.status(400).json({ error: "Please configure your payout method (PayPal, Bank, UPI, or Stripe) before requesting a payout." });
+    }
+
+    if (user.affiliateEarnings < reqAmount) {
+      return res.status(400).json({
+        error: `Insufficient balance. Available earnings: $${user.affiliateEarnings.toFixed(2)}, Requested: $${reqAmount.toFixed(2)}`
+      });
+    }
+
+    // Check if there is already a pending payout request
+    const pendingReq = await PayoutRequest.findOne({ user: user._id, status: "pending" });
+    if (pendingReq) {
+      return res.status(400).json({ error: "You already have a pending payout request under review by superadmin." });
+    }
+
+    const newRequest = await PayoutRequest.create({
+      user: user._id,
+      amount: reqAmount,
+      payoutMethod: user.payoutMethod,
+      payoutDetails: user.payoutDetails
+    });
+
+    res.status(201).json({
+      message: `Payout request for $${reqAmount.toFixed(2)} submitted successfully!`,
+      payoutRequest: newRequest
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// 5. Process Plan Checkout & Credit Affiliate
+const processCheckout = async (req, res, next) => {
+  try {
+    const { planId, planName, price, promoCode } = req.body;
+    const basePrice = Number(price) || 0;
+
+    if (!planName) {
+      return res.status(400).json({ error: "Plan name is required" });
+    }
+
+    const user = await User.findById(req.user.id);
+    if (!user) {
+      return res.status(404).json({ error: "User not found" });
+    }
+
+    let discountAmount = 0;
+    let promo = null;
+    let affiliateUser = null;
+
+    if (promoCode && typeof promoCode === "string") {
+      const formatted = promoCode.trim().toUpperCase();
+      promo = await PromoCode.findOne({ code: formatted, isActive: true });
+
+      if (promo) {
+        if (promo.discountType === "percentage") {
+          discountAmount = (basePrice * (promo.discountValue / 100));
+        } else {
+          discountAmount = promo.discountValue;
+        }
+
+        // Identify owner/affiliate
+        if (promo.ownerUser) {
+          affiliateUser = await User.findById(promo.ownerUser);
+        }
+
+        // Increment promo usage
+        promo.usageCount = (promo.usageCount || 0) + 1;
+        const finalPrice = Math.max(0, basePrice - discountAmount);
+        promo.salesGenerated = (promo.salesGenerated || 0) + finalPrice;
+        await promo.save();
+      }
+    }
+
+    // Fallback to referredBy if no promo code owner found
+    if (!affiliateUser && user.referredBy) {
+      affiliateUser = await User.findById(user.referredBy);
+    }
+
+    const finalAmount = Math.max(0, basePrice - discountAmount);
+    let commissionAmount = 0;
+
+    if (affiliateUser && String(affiliateUser._id) !== String(user._id)) {
+      // 30% lifetime commission
+      commissionAmount = Math.round((finalAmount * 0.3) * 100) / 100;
+
+      // Create transaction record
+      await AffiliateTransaction.create({
+        affiliateUser: affiliateUser._id,
+        referredUser: user._id,
+        promoCode: promo ? promo.code : "",
+        planId: planId || "plan",
+        planName,
+        saleAmount: finalAmount,
+        discountAmount,
+        commissionAmount,
+        status: "settled"
+      });
+
+      // Update affiliate stats
+      affiliateUser.affiliateSales = (affiliateUser.affiliateSales || 0) + finalAmount;
+      affiliateUser.affiliateEarnings = (affiliateUser.affiliateEarnings || 0) + commissionAmount;
+      if (!user.referredBy) {
+        user.referredBy = affiliateUser._id;
+        affiliateUser.affiliateSignups = (affiliateUser.affiliateSignups || 0) + 1;
+      }
+      await affiliateUser.save();
+    }
+
+    // Update customer's plan
+    user.plan = planName;
+    await user.save();
+
+    res.status(200).json({
+      message: `Successfully upgraded to ${planName}!`,
+      plan: user.plan,
+      basePrice,
+      discountAmount,
+      finalAmount,
+      commissionAmount
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// 6. Public Referral Click Tracker
 const trackReferralClick = async (req, res, next) => {
   try {
     const { code } = req.params;
@@ -150,7 +351,7 @@ const trackReferralClick = async (req, res, next) => {
   }
 };
 
-// 4. Public Promo Code Validator
+// 7. Public Promo Code Validator
 const validatePromoCode = async (req, res, next) => {
   try {
     const { promoCode } = req.body;
@@ -187,6 +388,9 @@ const validatePromoCode = async (req, res, next) => {
 module.exports = {
   getUserAffiliateDetails,
   updateCustomPromoCode,
+  updatePayoutMethod,
+  requestPayout,
+  processCheckout,
   trackReferralClick,
   validatePromoCode
 };

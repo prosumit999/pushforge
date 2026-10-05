@@ -739,6 +739,47 @@ const getSecurityLogs = async () => {
   return { logs: securityAuditLogs, total: securityAuditLogs.length };
 };
 
+const getPayoutRequests = async () => {
+  const { PayoutRequest } = require("../Models");
+  const requests = await PayoutRequest.find({})
+    .populate("user", "name email")
+    .sort({ createdAt: -1 });
+
+  return requests;
+};
+
+const updatePayoutStatus = async (id, { status, transactionId, rejectionReason }) => {
+  const { PayoutRequest, User } = require("../Models");
+  const reqItem = await PayoutRequest.findById(id).populate("user");
+  if (!reqItem) {
+    throw new Error("Payout request not found");
+  }
+
+  const oldStatus = reqItem.status;
+  reqItem.status = status;
+  if (transactionId) reqItem.transactionId = transactionId;
+  if (rejectionReason) reqItem.rejectionReason = rejectionReason;
+  await reqItem.save();
+
+  // If marked as paid, deduct from user's affiliateEarnings
+  if (status === "paid" && oldStatus !== "paid") {
+    const user = await User.findById(reqItem.user._id);
+    if (user) {
+      user.affiliateEarnings = Math.max(0, (user.affiliateEarnings || 0) - reqItem.amount);
+      await user.save();
+    }
+  }
+
+  logSecurityEvent({
+    type: "PAYOUT_STATUS_UPDATE",
+    title: `Payout Request ${status.toUpperCase()}`,
+    detail: `Payout of $${reqItem.amount} for ${reqItem.user?.email || "user"} marked as ${status}`,
+    severity: status === "rejected" ? "warning" : "info"
+  });
+
+  return reqItem;
+};
+
 module.exports = {
   loginSuperadmin,
   verifySuperadminOtp,
@@ -755,5 +796,7 @@ module.exports = {
   getAffiliatesAndPromoMetrics,
   createSuperadminPromoCode,
   togglePromoCodeStatus,
-  deletePromoCode
+  deletePromoCode,
+  getPayoutRequests,
+  updatePayoutStatus
 };

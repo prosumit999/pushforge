@@ -83,6 +83,15 @@ const userSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
       default: null
+    },
+    payoutMethod: {
+      type: String,
+      enum: ["paypal", "stripe", "bank", "upi", "none"],
+      default: "none"
+    },
+    payoutDetails: {
+      type: Object,
+      default: {}
     }
   },
   {
