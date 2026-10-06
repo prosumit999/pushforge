@@ -13,6 +13,10 @@ router.get("/:id", websiteController.getWebsite);
 router.post("/:id/verify", websiteController.verifyWebsite);
 router.put("/:id", validate(updateWebsiteSchema), websiteController.updateWebsite);
 router.put("/:id/prompt-config", websiteController.updatePromptConfig);
+router.get("/:id/smtp", websiteController.getSmtpConfig);
+router.put("/:id/smtp", websiteController.updateSmtpConfig);
+router.post("/:id/smtp/test", websiteController.testSmtpConnection);
+router.post("/:id/broadcast", websiteController.sendEmailBroadcast);
 router.delete("/:id", websiteController.deleteWebsite);
 
 module.exports = router;

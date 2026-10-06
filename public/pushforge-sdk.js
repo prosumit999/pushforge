@@ -217,7 +217,27 @@
       });
   }
 
+  function isForcePreview() {
+    try {
+      var s = window.location.search || "";
+      return s.indexOf("reset_snooze=1") > -1 || s.indexOf("pf_preview=1") > -1 || s.indexOf("reset_prompt=1") > -1;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  function resetSnooze() {
+    try {
+      localStorage.removeItem("pushforge_snooze_until");
+      console.log("PushForge: Opt-in prompt snooze cleared from localStorage!");
+    } catch (e) {}
+  }
+
   function isSnoozed() {
+    if (isForcePreview()) {
+      resetSnooze();
+      return false;
+    }
     try {
       var until = localStorage.getItem("pushforge_snooze_until");
       return until ? Date.now() < parseInt(until, 10) : false;
@@ -252,7 +272,7 @@
 
   function showCustomPrompt(opts) {
     if (isSnoozed()) {
-      console.log("PushForge: Opt-in prompt currently snoozed by visitor");
+      console.log("PushForge: Opt-in prompt currently snoozed by visitor. Call PushForge.resetSnooze() or append ?reset_snooze=1 to test.");
       return;
     }
 
@@ -369,12 +389,17 @@
     var statusDiv = document.getElementById("pf-email-status");
     var submitBtn = document.getElementById("pf-email-submit");
 
-    var dismissModal = function () {
+    var removeModal = function () {
       if (modal.parentNode) modal.parentNode.removeChild(modal);
     };
 
-    if (closeBtn) closeBtn.onclick = dismissModal;
-    if (cancelBtn) cancelBtn.onclick = dismissModal;
+    var snoozeAndCloseModal = function () {
+      snoozePrompt(7);
+      removeModal();
+    };
+
+    if (closeBtn) closeBtn.onclick = snoozeAndCloseModal;
+    if (cancelBtn) cancelBtn.onclick = snoozeAndCloseModal;
 
     if (form) {
       form.onsubmit = function (e) {
@@ -397,7 +422,7 @@
             statusDiv.style.color = "#10b981";
             statusDiv.innerText = "Thank you! Email registered successfully.";
             setTimeout(function () {
-              dismissModal();
+              removeModal();
               if (opts.enablePushAlso !== false && Notification.permission !== "granted") {
                 PushForge.requestPermissionAndSubscribe().catch(function () {});
               }
@@ -498,39 +523,83 @@
     var statusDiv = document.getElementById("pf-dual-status");
     var submitBtn = document.getElementById("pf-dual-submit");
 
-    var dismissModal = function () {
-      snoozePrompt(7);
+    var removeModal = function () {
       if (modal.parentNode) modal.parentNode.removeChild(modal);
     };
 
-    if (closeBtn) closeBtn.onclick = dismissModal;
-    if (cancelBtn) cancelBtn.onclick = dismissModal;
+    var snoozeAndCloseModal = function () {
+      snoozePrompt(7);
+      removeModal();
+    };
+
+    if (closeBtn) closeBtn.onclick = snoozeAndCloseModal;
+    if (cancelBtn) cancelBtn.onclick = snoozeAndCloseModal;
 
     if (form) {
       form.onsubmit = function (e) {
         e.preventDefault();
         var emailInput = document.getElementById("pf-dual-email");
         var val = emailInput ? emailInput.value.trim() : "";
+        var hasValidEmail = Boolean(val && val.includes("@"));
 
         submitBtn.disabled = true;
-        submitBtn.innerText = "Subscribing...";
+        submitBtn.innerText = "Saving...";
 
-        var emailPromise = val && val.includes("@") ? collectEmail(val, "", "Combined Dual Prompt") : Promise.resolve();
+        var emailSaved = false;
 
-        emailPromise
+        var saveEmail = function () {
+          if (hasValidEmail) {
+            return collectEmail(val, "", "Combined Dual Prompt")
+              .then(function () {
+                emailSaved = true;
+              })
+              .catch(function (err) {
+                console.warn("PushForge email collection fallback:", err.message || err);
+              });
+          }
+          return Promise.resolve();
+        };
+
+        saveEmail()
           .then(function () {
-            statusDiv.style.display = "block";
-            statusDiv.style.color = "#10b981";
-            statusDiv.innerText = "Subscribed! Requesting browser notification permission...";
-            return PushForge.requestPermissionAndSubscribe();
-          })
-          .then(function () {
-            setTimeout(dismissModal, 1000);
+            if (hasValidEmail || emailSaved) {
+              statusDiv.style.display = "block";
+              statusDiv.style.color = "#10b981";
+              statusDiv.innerText = "Thank you! Email registered successfully.";
+            }
+
+            if (Notification.permission === "denied") {
+              console.log("PushForge: Browser push permission is denied. Email collected successfully.");
+              setTimeout(removeModal, 1500);
+              return;
+            }
+
+            return PushForge.requestPermissionAndSubscribe()
+              .then(function () {
+                statusDiv.style.display = "block";
+                statusDiv.style.color = "#10b981";
+                statusDiv.innerText = "Thank you! Subscribed to updates & notifications.";
+                setTimeout(removeModal, 1200);
+              })
+              .catch(function (pushErr) {
+                console.log("PushForge push permission note:", pushErr.message || pushErr);
+                if (emailSaved || hasValidEmail) {
+                  statusDiv.style.display = "block";
+                  statusDiv.style.color = "#10b981";
+                  statusDiv.innerText = "Thank you! Email registered successfully.";
+                  setTimeout(removeModal, 1500);
+                } else {
+                  statusDiv.style.display = "block";
+                  statusDiv.style.color = "#ef4444";
+                  statusDiv.innerText = "Please enter a valid email address.";
+                  submitBtn.disabled = false;
+                  submitBtn.innerText = acceptText;
+                }
+              });
           })
           .catch(function (err) {
-            submitBtn.disabled = false;
-            submitBtn.innerText = acceptText;
-            setTimeout(dismissModal, 1000);
+            console.warn("PushForge form submit handler note:", err);
+            setTimeout(removeModal, 1500);
           });
       };
     }
@@ -545,7 +614,12 @@
         if (data.publicKey) setCachedVapidKey(data.publicKey);
         var config = data.promptConfig || {};
 
-        if (config.autoPrompt === false || isSnoozed()) return;
+        if (config.autoPrompt === false) return;
+
+        if (isSnoozed() && !isForcePreview()) {
+          console.log("PushForge: Opt-in prompt is currently snoozed in browser localStorage. Add ?reset_snooze=1 to URL or run PushForge.resetSnooze() to display again.");
+          return;
+        }
 
         var delay = (config.delaySeconds || 1) * 1000;
         setTimeout(function () {
@@ -626,15 +700,38 @@
     subscribe: subscribeUser,
     prompt: showCustomPrompt,
     emailPrompt: showEmailPrompt,
+    combinedPrompt: showCombinedDualPrompt,
     collectEmail: collectEmail,
     snoozePrompt: snoozePrompt,
+    resetSnooze: resetSnooze,
     isSnoozed: isSnoozed,
     requestPermissionAndSubscribe: function () {
-      return Notification.requestPermission().then(function (permission) {
-        if (permission === "granted") {
-          return subscribeUser();
-        } else {
-          throw new Error("Notification permission denied");
+      if (!("Notification" in window)) {
+        return Promise.reject(new Error("Notifications are not supported by this browser"));
+      }
+      if (Notification.permission === "granted") {
+        return subscribeUser();
+      }
+      return new Promise(function (resolve, reject) {
+        try {
+          var req = Notification.requestPermission(function (permission) {
+            if (permission === "granted") {
+              subscribeUser().then(resolve).catch(reject);
+            } else {
+              reject(new Error("Notification permission denied"));
+            }
+          });
+          if (req && typeof req.then === "function") {
+            req.then(function (permission) {
+              if (permission === "granted") {
+                subscribeUser().then(resolve).catch(reject);
+              } else {
+                reject(new Error("Notification permission denied"));
+              }
+            }).catch(reject);
+          }
+        } catch (e) {
+          reject(e);
         }
       });
     }

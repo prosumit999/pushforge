@@ -78,22 +78,16 @@ const publicSubscribeSchema = z.object({
 
 const publicEventSchema = z.object({
   body: z.object({
-    eventType: z.enum(["pageview", "session_start", "session_end", "click"]),
-    campaignId: z.string().optional(),
-    action: z.string().optional(),
-    path: z.string().optional(),
-    duration: z.number().optional(),
-    referrer: z.string().optional(),
-    location: z.object({
-      country: z.string().optional(),
-      city: z.string().optional()
-    }).optional(),
-    device: z.object({
-      browser: z.string().optional(),
-      os: z.string().optional(),
-      deviceType: z.string().optional()
-    }).optional()
-  })
+    eventType: z.string().min(1, "eventType is required"),
+    campaignId: z.string().optional().nullable(),
+    action: z.string().optional().nullable(),
+    path: z.string().optional().nullable(),
+    duration: z.number().optional().nullable(),
+    referrer: z.string().optional().nullable(),
+    landingPage: z.string().optional().nullable(),
+    location: z.any().optional().nullable(),
+    device: z.any().optional().nullable()
+  }).passthrough()
 });
 
 const createSegmentSchema = z.object({

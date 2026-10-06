@@ -1,34 +1,66 @@
 const nodemailer = require("nodemailer");
 
-const createTransporter = () => {
-  const user = process.env.GMAIL_USER;
-  const pass = process.env.GMAIL_APP_PASSWORD;
+const createTransporter = (customSmtp) => {
+  if (customSmtp && customSmtp.enabled && customSmtp.host && customSmtp.user && customSmtp.pass) {
+    const port = Number(customSmtp.port) || 587;
+    const isSecure = Boolean(customSmtp.secure || port === 465);
+    return nodemailer.createTransport({
+      host: customSmtp.host.trim(),
+      port: port,
+      secure: isSecure,
+      auth: {
+        user: customSmtp.user.trim(),
+        pass: customSmtp.pass
+      },
+      tls: {
+        rejectUnauthorized: false
+      }
+    });
+  }
+
+  const user = process.env.SMTP_USER || process.env.GMAIL_USER;
+  const pass = process.env.SMTP_PASS || process.env.GMAIL_APP_PASSWORD;
+  const host = process.env.SMTP_HOST;
+  const port = Number(process.env.SMTP_PORT) || 587;
 
   if (!user || !pass) {
     return null;
   }
 
+  if (host) {
+    return nodemailer.createTransport({
+      host: host.trim(),
+      port: port,
+      secure: port === 465,
+      auth: { user: user.trim(), pass: pass },
+      tls: { rejectUnauthorized: false }
+    });
+  }
+
   return nodemailer.createTransport({
     service: "gmail",
     auth: {
-      user,
-      pass
+      user: user.trim(),
+      pass: pass
     }
   });
 };
 
-const sendEmail = async ({ to, subject, html, text }) => {
+const sendEmail = async ({ to, subject, html, text, customSmtp, fromName, fromEmail }) => {
   try {
-    const transporter = createTransporter();
+    const transporter = createTransporter(customSmtp);
     const brandName = process.env.APP_NAME || process.env.BRAND_NAME || "PushForge";
 
     if (!transporter) {
-      console.warn("Gmail service notice: GMAIL_USER or GMAIL_APP_PASSWORD missing in env. Skipping email dispatch.");
-      return { success: false, reason: "Email service not configured in environment" };
+      console.warn("SMTP notice: No SMTP configuration found (custom or env). Skipping email dispatch.");
+      return { success: false, reason: "Email service not configured" };
     }
 
+    const senderName = fromName || customSmtp?.fromName || brandName;
+    const senderEmail = fromEmail || customSmtp?.fromEmail || customSmtp?.user || process.env.SMTP_USER || process.env.GMAIL_USER;
+
     const mailOptions = {
-      from: `"${brandName}" <${process.env.GMAIL_USER}>`,
+      from: `"${senderName}" <${senderEmail}>`,
       to,
       subject,
       text: text || "",
@@ -39,7 +71,20 @@ const sendEmail = async ({ to, subject, html, text }) => {
     console.log(`Email sent successfully to ${to}: Message ID ${info.messageId}`);
     return { success: true, messageId: info.messageId };
   } catch (error) {
-    console.error("Failed to send email via Gmail service:", error.message);
+    console.error("Failed to send email via SMTP service:", error.message);
+    return { success: false, error: error.message };
+  }
+};
+
+const verifySmtpConnection = async (customSmtp) => {
+  try {
+    const transporter = createTransporter(customSmtp);
+    if (!transporter) {
+      return { success: false, error: "Missing required SMTP credentials (Host, Username/Email, App Password)" };
+    }
+    await transporter.verify();
+    return { success: true, message: "SMTP server credentials verified successfully!" };
+  } catch (error) {
     return { success: false, error: error.message };
   }
 };
@@ -319,6 +364,7 @@ const buildWeeklyDigestEmailHtml = ({ name, totalSubscribers, totalSent, totalCl
 
 module.exports = {
   sendEmail,
+  verifySmtpConnection,
   buildVerificationEmailHtml,
   buildPasswordResetEmailHtml,
   buildPaymentReceiptEmailHtml,

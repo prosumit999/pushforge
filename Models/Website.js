@@ -90,6 +90,40 @@ const websiteSchema = new mongoose.Schema(
         type: Number,
         default: 1
       }
+    },
+    smtpConfig: {
+      enabled: {
+        type: Boolean,
+        default: false
+      },
+      host: {
+        type: String,
+        default: ""
+      },
+      port: {
+        type: Number,
+        default: 587
+      },
+      secure: {
+        type: Boolean,
+        default: false
+      },
+      user: {
+        type: String,
+        default: ""
+      },
+      pass: {
+        type: String,
+        default: ""
+      },
+      fromName: {
+        type: String,
+        default: ""
+      },
+      fromEmail: {
+        type: String,
+        default: ""
+      }
     }
   },
   {

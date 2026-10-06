@@ -215,6 +215,156 @@ const updatePromptConfig = async (userId, websiteId, promptConfig) => {
   return website;
 };
 
+const getSmtpConfig = async (userId, websiteId) => {
+  const website = await Website.findOne({ _id: websiteId, user: userId });
+  if (!website) {
+    const error = new Error("Website not found");
+    error.statusCode = 404;
+    throw error;
+  }
+  return website.smtpConfig || {
+    enabled: false,
+    host: "",
+    port: 587,
+    secure: false,
+    user: "",
+    pass: "",
+    fromName: "",
+    fromEmail: ""
+  };
+};
+
+const updateSmtpConfig = async (userId, websiteId, smtpConfig) => {
+  const website = await Website.findOne({ _id: websiteId, user: userId });
+  if (!website) {
+    const error = new Error("Website not found");
+    error.statusCode = 404;
+    throw error;
+  }
+
+  website.smtpConfig = {
+    ...(website.smtpConfig || {}),
+    ...smtpConfig,
+    port: Number(smtpConfig.port) || 587,
+    enabled: Boolean(smtpConfig.enabled)
+  };
+
+  await website.save();
+  return website.smtpConfig;
+};
+
+const testSmtpConnection = async (userId, websiteId, testConfig) => {
+  const website = await Website.findOne({ _id: websiteId, user: userId });
+  if (!website) {
+    const error = new Error("Website not found");
+    error.statusCode = 404;
+    throw error;
+  }
+
+  const smtpConfig = testConfig && testConfig.host ? testConfig : (website.smtpConfig || {});
+  if (!smtpConfig.host || !smtpConfig.user || !smtpConfig.pass) {
+    const error = new Error("Please fill out SMTP Host, Username/Email, and App Password.");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const { verifySmtpConnection, sendEmail } = require("./email.service");
+  const testRes = await verifySmtpConnection(smtpConfig);
+
+  if (!testRes.success) {
+    const error = new Error(testRes.error || "Failed to verify SMTP credentials");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const User = require("../Models/User");
+  const userObj = await User.findById(userId);
+
+  if (userObj && userObj.email) {
+    await sendEmail({
+      to: userObj.email,
+      subject: `PushForge SMTP Test - Verified for ${website.name}`,
+      text: `Congratulations! Your custom SMTP connection (${smtpConfig.host}) for ${website.name} is working properly.`,
+      html: `
+        <div style="font-family: sans-serif; padding: 20px; background: #0f172a; color: #fff; border-radius: 12px;">
+          <h2 style="color: #10b981; margin: 0 0 10px 0;">✓ Custom SMTP Verified Successfully!</h2>
+          <p style="color: #cbd5e1; font-size: 14px;">Your SMTP configuration for <strong>${website.name}</strong> (${website.domain}) is working.</p>
+          <ul style="color: #94a3b8; font-size: 13px;">
+            <li><strong>SMTP Server:</strong> ${smtpConfig.host}:${smtpConfig.port || 587}</li>
+            <li><strong>Sender Email:</strong> ${smtpConfig.fromEmail || smtpConfig.user}</li>
+            <li><strong>Sender Display Name:</strong> ${smtpConfig.fromName || website.name}</li>
+          </ul>
+        </div>
+      `,
+      customSmtp: smtpConfig,
+      fromName: smtpConfig.fromName || website.name,
+      fromEmail: smtpConfig.fromEmail || smtpConfig.user
+    });
+  }
+
+  return { success: true, message: "SMTP credentials verified! Test message sent to your admin email." };
+};
+
+const sendEmailBroadcast = async (userId, websiteId, { subject, content, senderName, senderEmail }) => {
+  const website = await Website.findOne({ _id: websiteId, user: userId });
+  if (!website) {
+    const error = new Error("Website not found");
+    error.statusCode = 404;
+    throw error;
+  }
+
+  const CollectedEmail = require("../Models/CollectedEmail");
+  const subscribers = await CollectedEmail.find({
+    $or: [{ website: website._id }, { siteKey: website.siteKey }, { siteKey: website.domain }],
+    status: "active"
+  });
+
+  if (!subscribers || subscribers.length === 0) {
+    const error = new Error("No active collected email subscribers found for this website.");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const { sendEmail } = require("./email.service");
+  const smtpConfig = website.smtpConfig || {};
+
+  let sentCount = 0;
+  let failCount = 0;
+
+  for (const sub of subscribers) {
+    const res = await sendEmail({
+      to: sub.email,
+      subject: subject,
+      html: `
+        <div style="font-family: -apple-system, sans-serif; max-width: 600px; margin: 0 auto; background: #ffffff; padding: 24px; border-radius: 12px; border: 1px solid #e2e8f0;">
+          <h2 style="color: #0f172a; margin-top: 0;">${subject}</h2>
+          <div style="font-size: 15px; color: #334155; line-height: 1.6; white-space: pre-wrap;">${content}</div>
+          <hr style="margin: 24px 0; border: none; border-top: 1px solid #e2e8f0;" />
+          <p style="font-size: 12px; color: #94a3b8; margin: 0;">You received this email because you subscribed to updates on ${website.name} (${website.domain}).</p>
+        </div>
+      `,
+      text: content,
+      customSmtp: smtpConfig,
+      fromName: senderName || smtpConfig.fromName || website.name,
+      fromEmail: senderEmail || smtpConfig.fromEmail || smtpConfig.user
+    });
+
+    if (res.success) {
+      sentCount++;
+    } else {
+      failCount++;
+    }
+  }
+
+  return {
+    success: true,
+    message: `Broadcast completed. ${sentCount} email(s) sent successfully.${failCount > 0 ? ` (${failCount} failed)` : ""}`,
+    sentCount,
+    failCount,
+    totalCount: subscribers.length
+  };
+};
+
 const cleanDomain = (domain) => {
   return domain.replace(/^https?:\/\//, "").replace(/\/.*$/, "").toLowerCase();
 };
@@ -226,5 +376,9 @@ module.exports = {
   verifyWebsite,
   updateWebsite,
   updatePromptConfig,
-  deleteWebsite
+  deleteWebsite,
+  getSmtpConfig,
+  updateSmtpConfig,
+  testSmtpConnection,
+  sendEmailBroadcast
 };

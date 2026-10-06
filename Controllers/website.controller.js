@@ -60,6 +60,42 @@ const updatePromptConfig = async (req, res, next) => {
   }
 };
 
+const getSmtpConfig = async (req, res, next) => {
+  try {
+    const smtpConfig = await websiteService.getSmtpConfig(req.user.id, req.params.id);
+    res.status(200).json(smtpConfig);
+  } catch (error) {
+    next(error);
+  }
+};
+
+const updateSmtpConfig = async (req, res, next) => {
+  try {
+    const smtpConfig = await websiteService.updateSmtpConfig(req.user.id, req.params.id, req.body);
+    res.status(200).json(smtpConfig);
+  } catch (error) {
+    next(error);
+  }
+};
+
+const testSmtpConnection = async (req, res, next) => {
+  try {
+    const result = await websiteService.testSmtpConnection(req.user.id, req.params.id, req.body);
+    res.status(200).json(result);
+  } catch (error) {
+    next(error);
+  }
+};
+
+const sendEmailBroadcast = async (req, res, next) => {
+  try {
+    const result = await websiteService.sendEmailBroadcast(req.user.id, req.params.id, req.body);
+    res.status(200).json(result);
+  } catch (error) {
+    next(error);
+  }
+};
+
 const deleteWebsite = async (req, res, next) => {
   try {
     const result = await websiteService.deleteWebsite(req.user.id, req.params.id);
@@ -76,5 +112,9 @@ module.exports = {
   verifyWebsite,
   updateWebsite,
   updatePromptConfig,
+  getSmtpConfig,
+  updateSmtpConfig,
+  testSmtpConnection,
+  sendEmailBroadcast,
   deleteWebsite
 };
