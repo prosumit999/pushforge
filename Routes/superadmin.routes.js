@@ -1,6 +1,7 @@
 const express = require("express");
 const router = express.Router();
 const superadminController = require("../Controllers/superadmin.controller");
+const blogController = require("../Controllers/blog.controller");
 const { requireSuperadmin } = require("../Middlewares/superadmin.middleware");
 
 // Auth Endpoints (Public for Superadmin)
@@ -26,6 +27,14 @@ router.put("/promo-codes/:id/toggle", superadminController.togglePromoCode);
 router.delete("/promo-codes/:id", superadminController.deletePromoCode);
 router.get("/payouts", superadminController.getPayoutRequests);
 router.put("/payouts/:id/status", (req, res, next) => superadminController.updatePayoutStatus(req.params.id, req, res, next));
+
+// Blog Management Endpoints
+router.get("/blogs", blogController.getAllBlogsSuperadmin);
+router.post("/blogs", blogController.createBlog);
+router.put("/blogs/:id", blogController.updateBlog);
+router.delete("/blogs/:id", blogController.deleteBlog);
+router.put("/blogs/:id/toggle-publish", blogController.togglePublishBlog);
+
 router.post("/logout", superadminController.logout);
 
 module.exports = router;

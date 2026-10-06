@@ -26,6 +26,7 @@ const emailRoutes = require("./Routes/email.routes");
 const superadminRoutes = require("./Routes/superadmin.routes");
 const affiliateRoutes = require("./Routes/affiliate.routes");
 const paymentRoutes = require("./Routes/payment.routes");
+const blogRoutes = require("./Routes/blog.routes");
 
 const app = express();
 
@@ -150,6 +151,7 @@ app.use("/api/v1/collected-emails", emailRoutes);
 app.use("/api/v1/superadmin", superadminRoutes);
 app.use("/api/v1/affiliate", affiliateRoutes);
 app.use("/api/v1/payment", paymentRoutes);
+app.use("/api/v1/blogs", blogRoutes);
 
 
 app.use((req, res) => {
