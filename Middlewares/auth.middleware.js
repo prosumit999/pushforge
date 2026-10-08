@@ -5,8 +5,13 @@ const authenticate = (req, res, next) => {
     let token = null;
 
     if (req.headers.authorization && req.headers.authorization.startsWith("Bearer ")) {
-      token = req.headers.authorization.split(" ")[1];
-    } else if (req.cookies && req.cookies.token) {
+      const authHeaderToken = req.headers.authorization.split(" ")[1];
+      if (authHeaderToken && authHeaderToken !== "null" && authHeaderToken !== "undefined") {
+        token = authHeaderToken;
+      }
+    }
+
+    if (!token && req.cookies && req.cookies.token) {
       token = req.cookies.token;
     }
 

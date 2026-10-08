@@ -20,7 +20,7 @@ const getInvoices = async (req, res, next) => {
 const downloadInvoice = async (req, res, next) => {
   try {
     const { id } = req.params;
-    const html = await paymentService.getInvoiceReceiptHtml(id, req.user.id);
+    const html = await paymentService.getInvoiceReceiptHtml(id, req.user.id, req.user.role);
 
     res.setHeader("Content-Type", "text/html");
     res.setHeader("Content-Disposition", `attachment; filename=invoice-${id}.html`);
