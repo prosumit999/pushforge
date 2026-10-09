@@ -34,27 +34,65 @@ if (process.env.NODE_ENV === "production") {
   app.set("trust proxy", 1);
 }
 
-const allowedOrigins = [
+const envOrigins = (process.env.CORS_ORIGIN || "")
+  .split(",")
+  .map(o => o.trim())
+  .filter(Boolean);
+
+const rawAllowedOrigins = [
   "http://localhost:5173",
   "http://localhost:3000",
   "http://localhost:5174",
+  "http://localhost:8082",
   "http://127.0.0.1:5173",
   "http://127.0.0.1:3000",
-  process.env.CORS_ORIGIN
-].filter(Boolean);
+  "http://127.0.0.1:8082",
+  "https://notify.sandhyasofttech.com",
+  ...envOrigins
+];
+
+const allowedOrigins = Array.from(
+  new Set(rawAllowedOrigins.map(o => o.replace(/\/+$/, "")))
+);
 
 app.use(
   cors({
     origin: (origin, callback) => {
-      if (!origin || allowedOrigins.includes(origin) || process.env.NODE_ENV !== "production") {
-        callback(null, true);
-      } else {
-        callback(null, origin);
+      // Allow requests with no origin (e.g. mobile apps, curl, server-to-server)
+      if (!origin) return callback(null, true);
+
+      const normalizedOrigin = origin.trim().replace(/\/+$/, "");
+
+      if (
+        allowedOrigins.includes(normalizedOrigin) ||
+        process.env.NODE_ENV !== "production"
+      ) {
+        return callback(null, true);
       }
+
+      // Check if domain host matches
+      const isAllowedDomain = allowedOrigins.some(ao => {
+        try {
+          return new URL(ao).hostname === new URL(normalizedOrigin).hostname;
+        } catch (_) {
+          return false;
+        }
+      });
+
+      if (isAllowedDomain) {
+        return callback(null, true);
+      }
+
+      console.warn(`[CORS Blocked] Request origin: "${origin}". Allowed origins:`, allowedOrigins);
+      callback(new Error(`CORS policy blocked access from origin ${origin}`));
     },
-    credentials: true
+    credentials: true,
+    methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With", "Accept", "Origin"]
   })
 );
+
+app.options("*", cors());
 
 app.use(
   express.json({
