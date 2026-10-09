@@ -92,8 +92,6 @@ app.use(
   })
 );
 
-app.options("*", cors());
-
 app.use(
   express.json({
     verify: (req, res, buf) => {
